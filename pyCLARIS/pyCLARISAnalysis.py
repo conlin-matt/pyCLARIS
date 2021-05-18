@@ -144,7 +144,7 @@ class pcManager():
 
     def gridPC_Slocum(self,xx,yy,function='min'):
         '''
-        Function to grid the point cloud using simple nearest neighbor interpolation following the strategy
+        Function to grid the classified point cloud using simple nearest neighbor interpolation following the strategy
         devised by Richie Slocum. This function is essentially a direct Python translation of his Matlab function
         for this specific 2d case (his function allows for arbitrary number of dimensions). Folks at the FRF know
         where to find the Matlab function. The gridding strategy contained herein requires seconds for multi-million
@@ -157,7 +157,8 @@ class pcManager():
                   Can be a variety of things, see (https://github.com/ml31415/numpy-groupies#available-functions) for all available
 
         returns:
-            vals1: Interpolated Z values over the grid
+            z_grid: Interpolated Z values over the grid
+            I_grid: Interpolated Intensity values over the grid (not sure if this will be useful)
 
         example:
             xx = np.arange(0,300,1)
@@ -178,49 +179,57 @@ class pcManager():
 ##        ygi = np.arange(0,101)
 ##        Xg = [xgi,ygi]
         
-        data = self.pipeline.arrays 
-        X = np.transpose(np.vstack([data[0]['X'],data[0]['Y'],data[0]['Z']]))
-        Xg = [xx,yy]
+        data = self.pipeline.arrays[0]
+        data = data[data['Classification']==0] # Filter the data to only include ground points #
 
-        # Get rid of data points outside the grid region #
-        Xfilt = X
-        for iDim in range(0,2):
-            dx = np.mean(np.diff(Xg[iDim])) # Grid spacing in dimension #
-            lowXg = Xg[iDim][0] # lowest val #
-            highXg = Xg[iDim][-1] # Highest val #
-            Xfilt = Xfilt[np.logical_and(Xfilt[:,iDim]>lowXg-(dx/2),Xfilt[:,iDim]<highXg+(dx/2)),:] # Keep only point between lowest and highest vals in the dimension #
+        allVals = []
+        for field in ['Z','Intensity']:
+            X = np.transpose(np.vstack([data['X'],data['Y'],data[field]]))
+            Xg = [xx,yy]
 
-        # Interpolate data point indicies to grid verticies #
-        Xind = Xfilt[:,0:2]
-        for iDim in range(0,2):
-            f = interp1d(Xg[iDim],np.arange(0,len(Xg[iDim])),kind='nearest',fill_value='extrapolate')
-            Xind[:,iDim] = f(Xfilt[:,iDim]).astype(int)
-        Xind = Xind.astype(int)
-        sizeXg = (len(Xg[0]),len(Xg[1]))
+            # Get rid of data points outside the grid region #
+            Xfilt = X
+            for iDim in range(0,2):
+                dx = np.mean(np.diff(Xg[iDim])) # Grid spacing in dimension #
+                lowXg = Xg[iDim][0] # lowest val #
+                highXg = Xg[iDim][-1] # Highest val #
+                Xfilt = Xfilt[np.logical_and(Xfilt[:,iDim]>lowXg-(dx/2),Xfilt[:,iDim]<highXg+(dx/2)),:] # Keep only point between lowest and highest vals in the dimension #
 
-        # Get the interpolated values #
-        vals1 = npg.aggregate(np.transpose(Xind),Xfilt[:,2],func=function,size=(sizeXg[0],sizeXg[1]),fill_value=np.nan)
+            # Interpolate data point indicies to grid verticies #
+            Xind = Xfilt[:,0:2]
+            for iDim in range(0,2):
+                f = interp1d(Xg[iDim],np.arange(0,len(Xg[iDim])),kind='nearest',fill_value='extrapolate')
+                Xind[:,iDim] = f(Xfilt[:,iDim]).astype(int)
+            Xind = Xind.astype(int)
+            sizeXg = (len(Xg[0]),len(Xg[1]))
+
+            # Get the interpolated values #
+            vals1 = npg.aggregate(np.transpose(Xind),Xfilt[:,2],func=function,size=(sizeXg[0],sizeXg[1]),fill_value=np.nan)
+            allVals.append(vals1)
 
 ##        fig,ax = plt.subplots(1)
 ##        ax.pcolor(xx,yy,np.transpose(vals1),vmin=-2,vmax=8)
 ##        ax.scatter(X[0:-1:100,0],X[0:-1:100,1],5,X[0:-1:100,2],vmin=-2,vmax=8,edgecolor='k',linewidth=0.2)
 ##        fig.show()
 
-        return np.transpose(vals1)
+        z_grid = np.transpose(allVals[0])
+        I_grid = np.transpose(allVals[1])
+
+        return z_grid,I_grid
 
 
         
     def createTransects(self,dy=5):
 
         '''
-        Create cross-shore transects directly from the point cloud at specified longshore spacing.
+        Create cross-shore transects directly from the classified point cloud at specified longshore spacing.
 
         args:
             dy: longshore transect spacing
 
         returns:
             transects: a list where each entry is a transect. Each entry is a 2-element list, where the first element
-                       is the raw point data (though only points with classification=1 i.e. ground points) used to create
+                       is the raw point data (though only points with classification=0 i.e. ground points) used to create
                        the transect, which is all points within dy/2 of the transect's longshore location. The second element
                        is the smoothed transect. Both elements are arrays structured the same way was the data returned from the
                        pdal pipeline.
