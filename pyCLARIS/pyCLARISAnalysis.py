@@ -49,25 +49,72 @@ def createFRFLas(lasDirec_or_lasFile):
             {
                 "type":"readers.las",
                 "filename":"""+'"'+lasFile+'"'+""" 
-            },
+            },  
             {
                 "type":"filters.python",
-                "script":"C:/Users/conli/Documents/FRF/rotatePC.py",
+                "script":"/Users/frfuser/Documents/pyCLARIS_project/pyCLARIS/rotatePC.py",
                 "function":"rotatePC",
                 "module":"foo_bar"
             },  
             {
                 "type":"filters.crop",
                 "bounds":"([-100,10000],[0,1000])"
-            },                     
+            },
             {
                 "type":"writers.las",
                 "filename":"""+'"'+lasFile.split('.')[0]+'_frf.las'+'"'+"""
-            } 
+            }
         ]
         """
+
+            
         pipeline = pdal.Pipeline(json)
         numPts = pipeline.execute()
+
+
+##        json = """
+##        [
+##            {
+##                "type":"readers.las",
+##                "filename":"""+'"'+lasFile+'"'+"""
+##            }
+##        ]
+##        """
+##
+##            
+##        pipeline = pdal.Pipeline(json)
+##        pipeline.execute()
+##
+##        data = pipeline.arrays
+##        datar = rotatePC(data)
+##
+##        def rotatePC(ins):
+##            x = ins[0]['X']
+##            y = ins[0]['Y']
+##            # Transform to FRF coords (state plan to frf) using the technique in frfCoord.m script #
+##            spAngle = (90-69.974707831)/(180/math.pi) # Angle of FRF system relative to state plane #
+##            Eom = 901951.6805 # FRF origin state plane Easting #
+##            Nom = 274093.1562 # FRF origin state plane Northing #
+##            SpLengE = x-Eom
+##            SpLengN = y-Nom
+##            R = np.sqrt(SpLengE**2+SpLengN**2)
+##            Ang1 = np.arctan2(SpLengE,SpLengN)
+##            Ang2 = Ang1+spAngle
+##            X_rot = np.multiply(R,np.sin(Ang2))
+##            Y_rot = np.multiply(R,np.cos(Ang2))
+##            outs=ins
+##            outs[0]['X'] = X_rot
+##            outs[0]['Y'] = Y_rot
+##            return outs
+
+
+
+
+
+
+
+
+        
         
         if numPts == 0: # If no points in the file, remove the newly created file #
             os.remove(lasFile.split('.')[0]+'_frf.las')
