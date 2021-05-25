@@ -2,7 +2,7 @@ import setuptools
 
 setuptools.setup(
     name="pyCLARIS",
-    version="0.1.1",
+    version="0.1.2",
     url="https://github.com/conlin-matt/pyCLARIS",
     author="Matthew P. Conlin",
     author_email="conlinm@ufl.edu",
