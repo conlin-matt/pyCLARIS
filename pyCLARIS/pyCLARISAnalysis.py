@@ -15,7 +15,6 @@ from scipy.interpolate import interp1d
 
 
 
-
 def createFRFLas(lasDirec_or_lasFile):
     '''
     Function to take las CLARIS data tile(s) and create a las point cloud file
@@ -35,7 +34,7 @@ def createFRFLas(lasDirec_or_lasFile):
 
     if not os.path.isfile(lasDirec_or_lasFile):
         files = sorted(os.listdir(lasDirec_or_lasFile))
-        files = [lasDirec_or_lasFile+'/'+i for i in files]
+        files = [lasDirec_or_lasFile+'/'+i for i in files if "Store" not in i]
         multiple = True
     else:
         files = [lasDirec_or_lasFile]
