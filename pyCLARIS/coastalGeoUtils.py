@@ -4,7 +4,6 @@ import math
 # Third-party imports #
 import calendar
 import datetime
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy import optimize
@@ -131,7 +130,8 @@ class NDBCWaveRecord():
             else:
                 allDat = dat
          
-        allDat.set_index(np.arange(0,len(allDat)),inplace=True)    
+        allDat.set_index(np.arange(0,len(allDat)),inplace=True)
+        allDat = allDat[allDat['wvht (m)']<90]
         return allDat
         
     def atTime(self,dat,date,param):
@@ -183,50 +183,108 @@ class NDBCWaveRecord():
         return pi
     
     
-def calcTWL(bdate,edate,B,station_wl,station_waves):
-    
-    # Get the water level record #
-    wlObj = NOAAWaterLevelRecord(station_wl,bdate,edate)
-    wl = wlObj.get()
-    
-    # Get the wave record and slice it to only include the desired time #
-    bdate_yr = int(str(bdate)[0:4])
-    edate_yr = int(str(edate)[0:4])
-    if int(edate_yr)-int(bdate_yr)==0:
-        years = bdate_yr
-    else:
-        years = [i for i in np.arange(bdate_yr,edate_yr+1)]
-    waveObj = NDBCWaveRecord(station_waves,years)
-    waves = waveObj.get()
-    tWave = [datetime.datetime(int(i[0]),int(i[1]),int(i[2])) for i in np.array(waves)]
-    bdate_datestr = datetime.datetime(int(str(bdate)[0:4]),int(str(bdate)[4:6]),int(str(bdate)[6:8]))
-    edate_datestr = datetime.datetime(int(str(edate)[0:4]),int(str(edate)[4:6]),int(str(edate)[6:8]))
-    waves = waves.loc[np.logical_and(np.array(tWave)>=bdate_datestr,np.array(tWave)<=edate_datestr)]
 
-    # Interpolate the hourly water level observations to the same sampling times as the waves #
-    def toTimestamp(d):
-        return calendar.timegm(d.timetuple())
-    
-    tWL = [datetime.datetime(int(i[0:4]),int(i[5:7]),int(i[8:10]),int(i[11:13]),int(i[14:16])) for i in np.array(wl['Time'])]
-    tWave = [datetime.datetime(int(i[0]),int(i[1]),int(i[2]),int(i[3]),int(i[4])) for i in np.array(waves)]
-
-    tsWL = [toTimestamp(i) for i in tWL]
-    tsWave = [toTimestamp(i) for i in tWave]
-    wli = np.interp(tsWave,tsWL,list(wl['wl_obs']))
-
-    # Calculate R2% #
-    H = waves['wvht (m)']
-    T = waves['DPD (sec)']
-    L = (9.81*np.square(T))/(2*math.pi) # APPROXIMATION #
-
-    setup = 0.35*beta*np.sqrt(H*L)
-    swash = np.sqrt(H*L*((0.563*(beta**2))+0.004))/2
-    TWL_mag = wli+(1.1*(setup+swash))
-
-    TWL = np.transpose(np.vstack([tWave,list(TWL_mag)]))
-
-    return TWL
                       
+
+class hydroLab():
+    def __init__(self,bdate,edate,station_wl=None,station_waves=None):
+
+        if not station_wl and not station_waves:
+            raise ValueError('Please provide a water level station ID, wave buoy number, or both')
+
+        if station_wl:
+            wlObj = NOAAWaterLevelRecord(station_wl,bdate,edate)
+            self.wl = wlObj.get()
+            
+        if station_waves:
+            bdate_yr = int(str(bdate)[0:4])
+            edate_yr = int(str(edate)[0:4])
+            if int(edate_yr)-int(bdate_yr)==0:
+                years = bdate_yr
+            else:
+                years = [i for i in np.arange(bdate_yr,edate_yr+1)]
+            waveObj = NDBCWaveRecord(station_waves,years)
+            self.waves = waveObj.get()
+            
+
+    def calcTWL(self,beta):
+
+        wl = self.wl
+        waves = self.waves
+
+        # Interpolate the hourly water level observations to the same sampling times as the waves #
+        def toTimestamp(d):
+            return calendar.timegm(d.timetuple())
+        
+        tWL = [datetime.datetime(int(i[0:4]),int(i[5:7]),int(i[8:10]),int(i[11:13]),int(i[14:16])) for i in np.array(wl['Time'])]
+        tWave = [datetime.datetime(int(i[0]),int(i[1]),int(i[2]),int(i[3]),int(i[4])) for i in np.array(waves)]
+
+        tsWL = [toTimestamp(i) for i in tWL]
+        tsWave = [toTimestamp(i) for i in tWave]
+        wli = np.interp(tsWave,tsWL,list(wl['wl_obs']))
+
+        # Calculate R2% #
+        H = waves['wvht (m)']
+        T = waves['DPD (sec)']
+        L = (9.81*np.square(T))/(2*math.pi) # APPROXIMATION #
+
+        setup = 0.35*beta*np.sqrt(H*L)
+        swash = np.sqrt(H*L*((0.563*(beta**2))+0.004))/2
+        TWL_mag = wli+(1.1*(setup+swash))
+
+        TWL = np.transpose(np.vstack([tWave,list(TWL_mag)]))
+
+        return TWL
+    
+
+    def transectTWLIntercept(self,TWL,x,z):
+
+        xx = x[~np.isnan(z)]
+        zz = z[~np.isnan(z)]
+        TWL = np.zeros(len(xx))+TWL
+        idx = np.argwhere(np.diff(np.sign(TWL - zz))).flatten()
+        x_intercept = xx[idx]
+        return x_intercept[0]
+        
+
+
+def newtRaph(T,h):
+    
+    '''
+    Function to determine k from dispersion relation given period (T) and depth (h) using
+    the Newton-Raphsun method.
+    '''
+    
+    L_not = (9.81*(T**2))/(2*math.pi)
+    k1 = (2*math.pi)/L_not
+
+    def fk(k):
+        return (((2*math.pi)/T)**2)-(9.81*k*math.tanh(k*h))
+    def f_prime_k(k):
+        return (-9.81*math.tanh(k*h))-(9.81*k*(1-(math.tanh(k*h)**2)))
+
+    k2 = 100
+    i = 0
+    while abs((k2-k1))/k1 > 0.01:
+          i+=1
+          if i!=1:
+              k1=k2
+          k2 = k1-(fk(k1)/f_prime_k(k1))
+
+    return k2
+
+
+def calcTransectSlope(x,z):
+    '''
+    Function to calculate the slope to use in an R2% calculation given a transect.
+    Slope is calculate by performing a linear regression of all points below 4 m
+    elevation (approx the dune toe?)
+    '''
+    b0,m = linearRegression(x[z<=4],z[z<=4])
+
+    return(-m)
+    
+
 
 def linearRegression(x,y):
     '''
@@ -245,9 +303,5 @@ def linearRegression(x,y):
     b_0 = m_y-b_1*m_x
 
     return b_0,b_1
-
-
-
-
 
 
