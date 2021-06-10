@@ -45,6 +45,9 @@ claris.createFRFLas("/direc_to_pre-storm_files",croper='frf')
 # Create the PC object #
 pc = claris.pcManager("/direc_to_pre-storm_files"+'/FRF.las') 
 
+# View the PC #
+pc.viewPC('rgb')
+
 # Grid the PC into a DSM and a colored image #
 dsm = pc.gridPC_Slocum(xx,yy,z_val='z',function='min')
 im = pc.gridPC_Slocum(xx,yy,z_val='rgb',function='mean')
