@@ -10,15 +10,18 @@ import numpy as np
 import numpy_groupies as npg
 import pdal
 import pptk
+from pybeach.beach import Profile
 from scipy import ndimage
 from scipy.interpolate import interp1d
 
+# Project imports #
+from . import coastalGeoUtils as utils
 
 
-def createFRFLas(lasDirec_or_lasFile):
+def createFRFLas(lasDirec_or_lasFile,croper='frf'):
     '''
     Function to take las CLARIS data tile(s) and create a las point cloud file
-    where the point cloud covers only the FRF property and is in FRF coordinates.
+    where the point cloud is in FRF coordinates.
     If multiple tiles, pass a directory containing (only) the tiles. If a single
     tile or file, pass the full file name (directory+file name). Creates an FRF.las
     point cloud.
@@ -26,19 +29,36 @@ def createFRFLas(lasDirec_or_lasFile):
     args:
         lasDirec_or_lasFile: Directory containing multiple tiles or full file name of single
                              file. Pass as a string.
+        croper: A variable describing how you would like the point cloud cropped. Options are:
+            'frf': crop the point cloud to the FRF property (i.e. 0 to 1000 m FRF Y)
+            None: do not crop the point cloud
+            [minX,maxX,minY,maxY]: a list of bounding coordinates in FRF coordinates
 
     returns:
         None, but will create an FRF.las point cloud in the directory specified or in the
               directory of the file that was passed.
     '''
 
+
+    dirname, filename = os.path.split(os.path.abspath(__file__)) # Get the directory to this file #
+    
     if not os.path.isfile(lasDirec_or_lasFile):
         files = sorted(os.listdir(lasDirec_or_lasFile))
-        files = [lasDirec_or_lasFile+'/'+i for i in files if "Store" not in i]
+        files = [lasDirec_or_lasFile+'/'+i for i in files if "Store" not in i and "2" in i]
         multiple = True
     else:
         files = [lasDirec_or_lasFile]
         multiple = False
+
+    if croper:
+        if croper=='frf':
+            bounds = [-100,10000,0,1000]
+        elif croper=='5km':
+            bounds = [-100,10000,-800,3995]
+        else:
+            bounds = croper
+    else:
+        bounds = [-100,10000,-800,3995]
         
     # Apply the FRF transformation pipeline to each tile, only keep tiles that cover the FRF #
     for lasFile in files:
@@ -49,16 +69,16 @@ def createFRFLas(lasDirec_or_lasFile):
             {
                 "type":"readers.las",
                 "filename":"""+'"'+lasFile+'"'+""" 
-            },  
+            },
             {
                 "type":"filters.python",
-                "script":"/Users/frfuser/Documents/pyCLARIS_project/pyCLARIS/rotatePC.py",
+                "script":"""+'"'+dirname+'/rotatePC.py'+'"'+""",
                 "function":"rotatePC",
                 "module":"foo_bar"
-            },  
+            },
             {
                 "type":"filters.crop",
-                "bounds":"([-100,10000],[0,1000])"
+                "bounds":"(["""+str(bounds[0])+""","""+str(bounds[1])+"""],["""+str(bounds[2])+""","""+str(bounds[3])+"""])"
             },
             {
                 "type":"writers.las",
@@ -70,50 +90,6 @@ def createFRFLas(lasDirec_or_lasFile):
             
         pipeline = pdal.Pipeline(json)
         numPts = pipeline.execute()
-
-
-##        json = """
-##        [
-##            {
-##                "type":"readers.las",
-##                "filename":"""+'"'+lasFile+'"'+"""
-##            }
-##        ]
-##        """
-##
-##            
-##        pipeline = pdal.Pipeline(json)
-##        pipeline.execute()
-##
-##        data = pipeline.arrays
-##        datar = rotatePC(data)
-##
-##        def rotatePC(ins):
-##            x = ins[0]['X']
-##            y = ins[0]['Y']
-##            # Transform to FRF coords (state plan to frf) using the technique in frfCoord.m script #
-##            spAngle = (90-69.974707831)/(180/math.pi) # Angle of FRF system relative to state plane #
-##            Eom = 901951.6805 # FRF origin state plane Easting #
-##            Nom = 274093.1562 # FRF origin state plane Northing #
-##            SpLengE = x-Eom
-##            SpLengN = y-Nom
-##            R = np.sqrt(SpLengE**2+SpLengN**2)
-##            Ang1 = np.arctan2(SpLengE,SpLengN)
-##            Ang2 = Ang1+spAngle
-##            X_rot = np.multiply(R,np.sin(Ang2))
-##            Y_rot = np.multiply(R,np.cos(Ang2))
-##            outs=ins
-##            outs[0]['X'] = X_rot
-##            outs[0]['Y'] = Y_rot
-##            return outs
-
-
-
-
-
-
-
-
         
         
         if numPts == 0: # If no points in the file, remove the newly created file #
@@ -149,6 +125,10 @@ def createFRFLas(lasDirec_or_lasFile):
 
         pipeline = pdal.Pipeline(json)
         pipeline.execute()
+
+        for i in files_frf:
+            os.remove(i)
+        
     else:
         os.rename(lasFile.split('.')[0]+'_frf.las',lasDirec_or_lasFile.replace(lasDirec_or_lasFile.split('/')[-1],'FRF.las'))
         
@@ -385,24 +365,20 @@ class pcManager():
             dy: longshore transect spacing
 
         returns:
-            transects: a list where each entry is a transect. Each entry is a 2-element list, where the first element
-                       is the raw point data (though only points with classification=0 i.e. ground points) used to create
-                       the transect, which is all points within dy/2 of the transect's longshore location. The second element
-                       is the smoothed transect. Both elements are arrays structured the same way as the data returned from the
+            transects: a list where each entry is a transect. The array is structured the same way as the data returned from the
                        pdal pipeline.
 
         example:
             transects = pc.createTransects(dy=5) -> pc is a point cloud object created by calling this class on a las/laz file i.e. pc = pyCLARISAnalysis.pcManager(lasFile)
             fig = plt.figure()
-            plt.plot(transects[51][0]['X'],transects[51][0]['Z'],'.'),plt.plot(transects[51][1]['X'],transects[51][1]['Z'],'k'),plt.show()
+            plt.plot(transects[51]['X'],transects[51]['Z'],'k'),plt.show()
             
 
-        TODO: potentially calculate transect RGB values by dividing the Intensity values directly, i.e.:
-        data_t_f['Red'] = [np.mean(data_t['Red'][abs(data_t['X']-xs[ii])<x_window/2]/data_t['Intensity'][abs(data_t['X']-xs[ii])<x_window/2]) for ii in range(0,len(xs))]
+        TODO: correct RGB value calc
 
         TODO: make faster
         
-        NOTE: Each smoothed entry in the returned transect list (i.e. element 2 of each transect entry) is a data array
+        NOTE: Each smoothed entry in the returned transect list is a data array
         with only fields: X,Y,Z,Intensity,Red,Green,Blue. I also had to change the dtype of the Intensity,R,G,B columns to float
         rather than int to accomodate NaNs. Could pose an issue later on?
 
@@ -413,27 +389,29 @@ class pcManager():
         yy = np.arange(min(data[0]['Y']),max(data[0]['Y']),dy)
 
         transects = []
-        x_window = .5
+        x_window = .25
         for y in yy:
             
             data_t = data[0][abs(data[0]['Y']-y)<dy/2]
             data_t = data_t[data_t['Classification']==0]
-            
-            xs = np.arange(min(data_t['X']),max(data_t['X']),x_window)
+            try:
+                xs = np.arange(min(data_t['X']),max(data_t['X']),x_window)
+            except:
+                data_t_f = []
+            else:
+                data_t_f= np.zeros((len(xs)), dtype=[("X","<f8"),("Y","<f8"),("Z","<f8"),("Intensity","<f8"),("Red","<f8"),("Green","<f8"),("Blue","<f8")])
+                data_t_f['X'] = [xs[ii] for ii in range(0,len(xs))]
+                data_t_f['Y'] = np.tile(y,np.shape(data_t_f['X']))
+                for field in ['Z','Intensity','Red','Green','Blue']:
+                    data_t_f[field] = [np.mean(data_t[field][abs(data_t['X']-xs[ii])<x_window/2]) for ii in range(0,len(xs))]
+                    
+    ##            data_t_f['Z'] = [np.mean(data_t['Z'][abs(data_t['X']-xs[ii])<x_window/2]) for ii in range(0,len(xs))]
+    ##            data_t_f['Intensity'] = [np.mean(data_t['Intensity'][abs(data_t['X']-xs[ii])<x_window/2]) for ii in range(0,len(xs))]
+    ##            data_t_f['Red'] = [np.mean(data_t['Red'][abs(data_t['X']-xs[ii])<x_window/2]) for ii in range(0,len(xs))]
+    ##            data_t_f['Green'] = [np.mean(data_t['Green'][abs(data_t['X']-xs[ii])<x_window/2]) for ii in range(0,len(xs))]
+    ##            data_t_f['Blue'] = [np.mean(data_t['Blue'][abs(data_t['X']-xs[ii])<x_window/2]) for ii in range(0,len(xs))]
 
-            data_t_f= np.zeros((len(xs)), dtype=[("X","<f8"),("Y","<f8"),("Z","<f8"),("Intensity","<f8"),("Red","<f8"),("Green","<f8"),("Blue","<f8")])
-            data_t_f['X'] = [xs[ii] for ii in range(0,len(xs))]
-            data_t_f['Y'] = np.tile(y,np.shape(data_t_f['X']))
-            for field in ['Z','Intensity','Red','Green','Blue']:
-                data_t_f[field] = [np.mean(data_t[field][abs(data_t['X']-xs[ii])<x_window/2]) for ii in range(0,len(xs))]
-                
-##            data_t_f['Z'] = [np.mean(data_t['Z'][abs(data_t['X']-xs[ii])<x_window/2]) for ii in range(0,len(xs))]
-##            data_t_f['Intensity'] = [np.mean(data_t['Intensity'][abs(data_t['X']-xs[ii])<x_window/2]) for ii in range(0,len(xs))]
-##            data_t_f['Red'] = [np.mean(data_t['Red'][abs(data_t['X']-xs[ii])<x_window/2]) for ii in range(0,len(xs))]
-##            data_t_f['Green'] = [np.mean(data_t['Green'][abs(data_t['X']-xs[ii])<x_window/2]) for ii in range(0,len(xs))]
-##            data_t_f['Blue'] = [np.mean(data_t['Blue'][abs(data_t['X']-xs[ii])<x_window/2]) for ii in range(0,len(xs))]
-
-            transects.append([data_t,data_t_f])
+            transects.append(data_t_f)
 
         return transects
 
@@ -483,7 +461,7 @@ def extractChangeAreas(xx,yy,dsm_pre,dsm_post,thresh=0.1):
             pc =  pyCLARIS.pyCLARISAnalysis.pcManager(direc+'/FRF.las') --> See pcManager class above 
             dsm = pc.gridPC_Slocum(numpy.arange(50,120,1),numpy.arange(0,1000,1),z_val='z',function='min')
             dsms.append(dsm)
-        regions_agg,regions_deg = pyCLARIS.pyCLARISAnalysis.extractChangeAreas(dsms[0],dsms[1],thresh=0.1)
+            regions_agg,regions_deg = pyCLARIS.pyCLARISAnalysis.extractChangeAreas(dsms[0],dsms[1],thresh=0.1)
     
 
     '''
@@ -528,6 +506,203 @@ def extractChangeAreas(xx,yy,dsm_pre,dsm_post,thresh=0.1):
     regions_deg = regions_both[1]
 
     return regions_agg,regions_deg
+
+
+class scarpManager():
+    
+    def __init__(self,thresh_vertChange=0.5,thresh_longshoreContinuity=100,thresh_minimumElev=1.5,thresh_slope_after=35):
+        self.thresh_vertChange = thresh_vertChange
+        self.thresh_longshoreContinuity = thresh_longshoreContinuity
+        self.thresh_minimumElev=thresh_minimumElev
+        self.thresh_slope_after = thresh_slope_after
+
+    def calcBTOverBf(self,xx,yy,dsm_pre,dsm_post,T,IDmethod,regions_agg=None,regions_deg=None,file_pre=None,file_post=None):
+        '''
+        Method to calculate the BT/Bf value for a scarp. Method has a number of sub-methods to do this in parts; the results
+        of each sub-method can be accessed as part of the class after this method is called.
+
+        Sub-methods:
+            idScarpRegions(): ID regions of likely scarp retreat from a DEM as lonshore-continuous regions of pronounced degradation above a contour
+            extractScarpTransects(): Find transects (previously created) that intersect the scarp retreat regions, and keep only those with a steep slope (scarp)
+            idScarpToesOnTransects(): Idenitify the toe of the scarp on each transect
+            calcBf(): Calculate the beachface slope in front of the scarp toe in the pre DSM
+            calcBT(): Calculate the retreat trajectory
+            calcRatio(): Calculate the BT/Bf ratio
+
+        args:
+            xx: vector of x grid values used to create the DSMs
+            yy: vector of y grid values used to create the DSMs
+            dsm_pre: The pre-storm dsm
+            dsm_post: The post-storm dsm
+            T: The transect list creted from the two point clouds
+            IDmethod: The method to use for scarp toe identification. Options are 'manual','ml','mc','rr','pd'
+            regions_agg and _deg: (optional) The extraction of change regions from the DoD can be quite time consuming, so if you have previously
+                                  created and saved these regions, you can input them and skip the step of computing them here.
+            file_pre and _post: (optional, only needed if IDmethod="manual") Full path+filename to las point cloud files pre and post-storm
+
+        returns:
+            BTBf: The BT/Bf ration computed at each transect within the change region(s). This is a list of len=number of change regions.
+        '''
+
+        def idScarpRegions(regions_agg,regions_deg):
+            '''
+            Identify regions of scarp retreat from a DEM of Difference using a rules-based approach.
+            '''
+            
+            # Find change regions above the minimum vertChange threshold #
+            if regions_agg and regions_deg:
+                pass
+            else:
+                regions_agg,regions_deg = extractChangeAreas(xx,yy,dsm_pre,dsm_post,thresh=self.thresh_vertChange)
+
+            # Regions that meet the longshore continuity threshold #
+            regions_deg1 = []
+            for reg in regions_deg:
+                longshoreDist = np.max(reg[:,1])-np.min(reg[:,1])
+                if longshoreDist>=self.thresh_longshoreContinuity:
+                    regions_deg1.append(reg)
+
+            # Regions that meet elevation threshold #
+            regions_deg2 = []
+            for reg in regions_deg1:
+                z = []
+                for i in reg:
+                    z.append(dsm_pre[np.where(yy==i[1])[0][0],np.where(xx==i[0])[0][0]])
+                if all(np.array(z)>self.thresh_minimumElev):
+                    regions_deg2.append(reg)
+
+            return regions_deg2
+
+
+        def extractScarpTransects(scarpRegions):
+
+            # Extract transects in the IDd scarp region that meet the angle threshold #
+            T_scarps = []
+            for scarp in scarpRegions:
+                i_int = []
+                for i in range(0,len(T[1])):
+                    if min(scarp[:,1])<=T[1][i]['Y'][0]<=max(scarp[:,1]):
+                        i_int.append(i)
+                    T_int = [[T[0][i] for i in i_int],[T[1][i] for i in i_int]]
+                    
+                i_scarp = []
+                for i in range(0,len(T_int[0])):
+                    i_use = np.logical_and(T_int[1][i]['X']>=min(scarp[:,0]),T_int[1][i]['X']<=max(scarp[:,0]))
+                    x = T_int[1][i]['X'][i_use]
+                    z = T_int[1][i]['Z'][i_use]
+                    dzdx = np.diff(z)/np.diff(x)
+                    ang = np.degrees(np.tan(dzdx))
+                    if max(abs(ang))>50:
+                        i_scarp.append(i_int[i])
+
+                T_scarp = [[T[0][i] for i in i_scarp],[T[1][i] for i in i_scarp]]
+                T_scarps.append(T_scarp)
+
+            return T_scarps
+
+
+        def idScarpToesOnTransects(T_scarps,method):
+
+            toes_all = []
+            for T_scarp in T_scarps:
+            
+                toes = [np.empty([0,3]),np.empty([0,3])]
+                for day in range(0,2):
+                    for t in range(0,len(T_scarp[0])):
+                        x = T_scarp[day][t]['X'][30:-1]
+                        z = T_scarp[day][t]['Z'][30:-1]
+                        pb = Profile(x,z)
+                        toe = eval('pb.predict_dunetoe_'+method+'()')
+                        toe_x = x[toe[0]]
+                        toe_y = T_scarp[day][t]['Y'][0]
+                        toe_z = z[toe[0]]
+                        toes[day] = np.vstack([toes[day],np.hstack([toe_x,toe_y,toe_z])])
+
+                toes_all.append(toes)
+
+            return toes_all
+
+
+        def idScarpToesManually(file_pre,file_post,scarpRegions,T_scarps):
+            for i in scarpRegions:
+                print('IDd scarp region is y='+str(min(reg[i][:,1]))+' to y='+str(max(reg[i][:,1]))+'. Click on the scarp toe in the window and press Enter, then do it again in the new window.')
+
+            pc_bef = pcManager(file_pre)
+            scarp_bef = pc_bef.grabFeatures(len(scarpRegions),'rgb')
+
+            pc_aft = pcManager(file_post)
+            scarp_aft = pc_aft.grabFeatures(len(scarpRegions),'rgb')
+
+            toes_all = []
+            for ii in range(0,len(scarpRegions)):
+                scarps = [scarp_bef[ii],scarp_aft[ii]]
+                xis = []
+                zis = []
+                yys = [T_scarps[0][0][i]['Y'][0] for i in range(0,len(T_scarps[0][0]))]
+                toes = []
+                for scarp in scarps:
+                    
+                    f = interp1d(scarp[:,1],scarp[:,0],bounds_error=False,fill_value=np.nan)
+                    xi = f(yys)
+
+                    f = interp1d(scarp[:,1],scarp[:,2],bounds_error=False,fill_value=np.nan)
+                    zi = f(yys)
+
+                    toe = np.transpose(np.vstack([xi,yys,zi]))
+                    toes.append(toe)
+            toes_all.append(toes)
+
+            return toes_all
+                
+        
+
+        def calcBf(T_scarps,toes):
+            
+            Bf_all = []
+            for ii in range(0,len(T_scarps)):
+
+                Bf = []
+                for t in range(0,len(T_scarps[ii][0])):
+                    x_beta = T_scarps[ii][0][t]['X'][T_scarps[ii][0][t]['X']>=toes[ii][0][t,0]]
+                    z_beta = T_scarps[ii][0][t]['Z'][T_scarps[ii][0][t]['X']>=toes[ii][0][t,0]]
+                    icept,m = utils.linearRegression(x_beta[~np.isnan(z_beta)],z_beta[~np.isnan(z_beta)])
+                    Bf.append(-m)
+
+                Bf_all.append(Bf)
+
+            return Bf_all
+
+
+        def calcBT(toes):
+
+            BT_all = []
+            for ii in range(0,len(toes)):
+                BT = -((toes[ii][1][:,2]-toes[ii][0][:,2])/(toes[ii][1][:,0]-toes[ii][0][:,0]))
+                BT_all.append(BT)
+
+            return BT_all
+
+        def calcRatio(Bf,BT):
+
+            BTBf_all = []
+            for ii in range(0,len(Bf)):
+                BTBf = BT[ii]/Bf[ii]
+                BTBf_all.append(BTBf)
+
+            return BTBf_all
+
+            
+        self.scarpRegions = idScarpRegions(regions_agg,regions_deg)
+        self.T_scarps = extractScarpTransects(self.scarpRegions)
+        if IDmethod is not 'manual':
+            self.scarpToes = idScarpToesOnTransects(self.T_scarps,IDmethod)
+        else:
+            self.scarpToes = idScarpToesManually(file_pre,file_post,self.scarpRegions,self.T_scarps)
+        self.Bf = calcBf(self.T_scarps,self.scarpToes)
+        self.BT = calcBT(self.scarpToes)
+        self.BTBf = calcRatio(self.Bf,self.BT)
+        return self.BTBf
+
 
 
 
