@@ -20,7 +20,8 @@ pyCLARIS can be downloaded and used fairly simply using Anaconda and pip, with s
 
 1. Create a new environment named claris_env and put Python v3.6 in it:
 
-    `conda create -n claris_env python=3.6`
+    `conda create -n claris_env python=3.6`  
+    `conda activate claris_env`
     
 2. Install the PDAL package from the conda-forge channel:
 
