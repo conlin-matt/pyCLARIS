@@ -31,6 +31,7 @@ def createFRFLas(lasDirec_or_lasFile,croper='frf'):
                              file. Pass as a string.
         croper: A variable describing how you would like the point cloud cropped. Options are:
             'frf': crop the point cloud to the FRF property (i.e. 0 to 1000 m FRF Y)
+            '5km': crop the point cloud to the typical 5 km CLARIS stretch (~-1000-4000 FRF Y)
             None: do not crop the point cloud
             [minX,maxX,minY,maxY]: a list of bounding coordinates in FRF coordinates
 
@@ -41,9 +42,10 @@ def createFRFLas(lasDirec_or_lasFile,croper='frf'):
 
 
     dirname, filename = os.path.split(os.path.abspath(__file__)) # Get the directory to this file #
+    dirname = dirname.replace('\\','/')
     
     if not os.path.isfile(lasDirec_or_lasFile):
-        files = sorted(os.listdir(lasDirec_or_lasFile))
+        files = [i for i in sorted(os.listdir(lasDirec_or_lasFile)) if '.las' in i]
         files = [lasDirec_or_lasFile+'/'+i for i in files if "Store" not in i and "2" in i]
         multiple = True
     else:
