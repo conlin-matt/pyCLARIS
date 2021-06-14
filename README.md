@@ -27,10 +27,15 @@ pyCLARIS can be downloaded and used fairly simply using Anaconda and pip, with s
 
     `conda install -c conda-forge pdal python-pdal gdal`
     
-3. Install the rest of the package and its dependencies:
+3. Install the package and most of its dependencies:
 
     `pip install git+https://github.com/conlin-matt/pyCLARIS`
     
+4. Install the last package and prevent it from upgrading anything that would cause issues:
+
+    `pip install --upgrade --upgrade-strategy only-if-needed pybeach`
+    
+
 ## Usage ##
 ```python
 import numpy as np
