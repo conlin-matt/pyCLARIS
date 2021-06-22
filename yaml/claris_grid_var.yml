@@ -1,0 +1,66 @@
+_variables: ['time', 'xFRF', 'yFRF', 'latitude', 'longitude', 'elevation']
+_attributes: ['notes']
+_dimensions: ['time', 'yFRF', 'xFRF']
+
+time:
+    name: 'time'
+    units: 'seconds since 1970-01-01 00:00:00'
+    standard_name: 'time'
+    notes: 'UTC Survey Date'
+    data_type: 'f8'
+    dim: ['time']
+    calendar: 'gregorian'
+    fill_value: '-999'
+
+yFRF:
+    name: 'yFRF'
+    units: 'm'
+    long_name: 'along-shore position of each node - m'
+    data_type: 'f8'
+    dim: ['yFRF']
+    fill_value: '-999'
+    short_name: 'yFRF'
+    notes: 'along-shore position of each node in m FRF coordinates'
+
+xFRF:
+    name: 'xFRF'
+    units: 'm'
+    long_name: 'cross-shore position of each node - m'
+    data_type: 'f8'
+    dim: ['xFRF']
+    fill_value: '-999'
+    short_name: 'xFRF'
+    notes: 'cross-shore position of each node in m FRF coordinates'
+
+elevation:
+    name: 'elevation'
+    units: 'm'
+    long_name: 'bed elevation for each node'
+    data_type: 'f8'
+    dim: ['time', 'yFRF', 'xFRF']
+    fill_value: '-999'
+    short_name: 'bathy'
+    notes: 'Bed elevation derived from CLARIS lidar in NAVD88'
+    least_significant_digit: 2
+
+latitude:
+    name: 'latitude'
+    units: 'Degrees'
+    standard_name: 'latitude'
+    long_name: 'Latitude of each topography node in decimal degrees'
+    data_type: 'f8'
+    dim: ['yFRF', 'xFRF']
+    fill_value: '-999'
+    short_name: 'lat'
+    notes: 'Latitude of the topography nodes in decimal degrees'
+
+longitude:
+    name: 'longitude'
+    units: 'Degrees'
+    standard_name: 'longitude'
+    long_name: 'Longitude of each topography node in decimal degrees'
+    data_type: 'f8'
+    dim: ['yFRF', 'xFRF']
+    fill_value: '-999'
+    short_name: 'lon'
+    notes: 'Longitude of the topography nodes in decimal degrees'
