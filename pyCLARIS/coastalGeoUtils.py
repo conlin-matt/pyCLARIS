@@ -280,7 +280,7 @@ def calcTransectSlope(x,z):
     Slope is calculate by performing a linear regression of all points below 4 m
     elevation (approx the dune toe?)
     '''
-    b0,m = linearRegression(x[z<=4],z[z<=4])
+    b0,m = linearRegression(x[z<=3],z[z<=3])
 
     return(-m)
     
@@ -303,5 +303,39 @@ def linearRegression(x,y):
     b_0 = m_y-b_1*m_x
 
     return b_0,b_1
+
+
+def FRF2LL(xFRF,yFRF):
+    '''
+    Function to convert FRF coordinates to lat/lon. This is a partial translation of
+    Kent Hathaway frfCoord.m script.
+
+    args:
+        xFRF: (array-like) FRF X values
+        yFRF: (array-like) FRF y values
+        
+    returns:
+        lat: latitude values (decimal degrees)
+        lon: longitude values (decimal degrees)
+    '''
+    
+    r2d = 180.0 / math.pi
+    ALat0=36.1775975              # Origin Lat minutes
+    ALon0=75.7496860              # Origin Lon minutes
+    DegLat = 110963.35726         # m/deg Lat
+    DegLon = 89953.36413          # m/deg long
+    GridAngle=18.1465 /r2d
+
+    R = np.sqrt(xFRF**2 + yFRF**2)
+    Ang1 = np.arctan2(xFRF, yFRF)          # CW from Y
+    Ang2 = Ang1 - GridAngle            
+    ALatLeng = np.multiply(R,np.cos(Ang2))
+    ALonLeng = np.multiply(R,np.sin(-Ang2))     # neg to go west
+    ALat = ALatLeng/DegLat + ALat0    # was 60 * ALatLeng./DegLat + ALat0;
+    ALon = ALonLeng/DegLon + ALon0
+    
+    return ALat,ALon
+    
+    
 
 
