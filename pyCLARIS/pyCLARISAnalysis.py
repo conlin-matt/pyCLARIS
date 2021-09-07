@@ -600,7 +600,7 @@ def exportNetCDF(lasDirec,date,croper='5km'):
     
  
     
-def calcAverageProfile(direcs,analysisLen,xi):
+def calcAverageProfile(direcs,analysisLen=5,xi=np.arange(0,1.01,0.01)):
     
     def cropNormalizeGrid(transects1,xi):
         
