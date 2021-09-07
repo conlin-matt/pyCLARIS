@@ -106,30 +106,37 @@ def createFRFLas(lasDirec_or_lasFile,croper='frf'):
         files_frf = sorted(os.listdir(lasDirec_or_lasFile))
         files_frf = [lasDirec_or_lasFile+'/'+i for i in files_frf if '_frf' in i]        
 
-        string_block = ''
-        for i in files_frf:
-            if i == files_frf[0]:
-                string_block += i+'",\n            '
-            elif i != files_frf[-1]:
-                string_block += '"'+i+'",\n        '
+        if len(files_frf)>0:
+            if len(files_frf)>1:
+                string_block = ''
+                for i in files_frf:
+                    if i == files_frf[0]:
+                        string_block += i+'",\n            '
+                    elif i != files_frf[-1]:
+                        string_block += '"'+i+'",\n        '
+                    else:
+                        string_block += '"'+i        
+        
+                json = """
+                [
+                    """+'"'+string_block+'",'+"""
+                    {
+                        "type":"filters.merge"
+                    },
+                    """+'"'+lasDirec_or_lasFile+'/FRF.las'+'"'+"""
+                ]
+                """
+        
+                pipeline = pdal.Pipeline(json)
+                pipeline.execute()
+        
+                for i in files_frf:
+                    os.remove(i)
             else:
-                string_block += '"'+i        
-
-        json = """
-        [
-            """+'"'+string_block+'",'+"""
-            {
-                "type":"filters.merge"
-            },
-            """+'"'+lasDirec_or_lasFile+'/FRF.las'+'"'+"""
-        ]
-        """
-
-        pipeline = pdal.Pipeline(json)
-        pipeline.execute()
-
-        for i in files_frf:
-            os.remove(i)
+                os.rename(files_frf[0],files_frf[0].replace(files_frf[0].split('/')[-1],'FRF.las'))
+                
+        else:
+            print('WARNING: no data were found in desired region- no FRF file was created')
         
     else:
         os.rename(lasFile.split('.')[0]+'_frf.las',lasDirec_or_lasFile.replace(lasDirec_or_lasFile.split('/')[-1],'FRF.las'))
@@ -296,6 +303,8 @@ class pcManager():
         # Load the data #
         data = self.pipeline.arrays[0]
         data = data[data['Classification']==0] # Filter the data to only include ground points #
+        if len(data)==0: # If there is no classification, just use all points #
+            data = self.pipeline.arrays[0]
 
         # Determine the field(s) to grid based on user input #
         if z_val=='z':
@@ -389,6 +398,8 @@ class pcManager():
             
             data_t = data[0][abs(data[0]['Y']-y)<dy/2]
             data_t = data_t[data_t['Classification']==0]
+            if len(data_t)==0: # If there is no classification, just use all points #
+                data_t = data[0][abs(data[0]['Y']-y)<dy/2]
             try:
                 xs = np.arange(min(data_t['X']),max(data_t['X']),x_window)
                 if len(xs)==0:
@@ -424,15 +435,18 @@ class pcManager():
         if rgb_or_I == 'rgb':
             if np.all(data[0][1:1000]['Blue']==65280) or np.all(data[0][1:1000]['Blue']==0): # No RGB info #
                 self.rgb = data[0]['Z']
+                self.v = pptk.viewer(self.xyz,self.rgb)
+                self.v.set(color_map_scale=(0,8))
             else:
                 self.rgb = np.transpose(np.array([data[0]['Red']/256/255,data[0]['Green']/256/255,data[0]['Blue']/256/255]))
+                self.v = pptk.viewer(self.xyz,self.rgb)
         elif rgb_or_I == 'I':
             self.rgb = data[0]['Intensity']
+            self.v = pptk.viewer(self.xyz,self.rgb)
         else:
             raise ValueError("Please input an arg for rgb_or_I: 'rgb' if you want the point cloud colored by RGB values, 'I' if by intensity values")
             
-        self.v = pptk.viewer(self.xyz,self.rgb)
-        self.v.set(color_map_scale=(0,8))
+
         self.v.set(point_size=.02)
 
     def idFeature(self):
@@ -511,57 +525,68 @@ def extractChangeAreas(xx,yy,dsm_pre,dsm_post,thresh=0.1):
 
 
 
-def exportNetCDF(lasDirec,croper='5km'):    
+def exportNetCDF(lasDirec,date,croper='5km'):    
     '''
     Function to export CLARIS data as a NetCDF file using Spicer's pyMakeNetCDF library.
     
     args:
         lasDirec: directory containing (only) .las CLARIS data tiles
+        date: The date of the survey. Format should be "yyyy-mm-dd"
         croper: How to crop the data, as specified in creteFRFLas
         
     returns:
         Nothing, but creates a NetCDF called FRFnc.nc in the directory containing the las tiles
         
     NOTE:
-        To use this, you will need to git clone https://github.com/SBFRF/pyMakeNetCDF into your site-packages folder
+        To use this, you will need to git clone https://github.com/SBFRF/pyMakeNetCDF into your site-packages folder (or anywhere on your python path)
     '''
     
     
+    from datetime import datetime
+    import numpy.ma as ma
+    import netCDF4 as nc
     from pyMakeNetCDF import py2netCDF as p2nc
+    import pytz
     
     if croper=='5km':
-        xx = np.arange(-100,200,0.25)
-        yy = np.arange(-1000,4000,0.25)
-    elif croper=='FRF':
-        xx = np.arange(-100,200,0.25)
-        yy = np.arange(0,1000,0.25)
+        xFRF = np.arange(-100,200,0.25)
+        yFRF = np.arange(-1000,4000,0.25)
+    elif croper=='frf':
+        xFRF = np.arange(-100,200,0.25)
+        yFRF = np.arange(0,1000,0.25)
     else:
-        xx = np.arange(croper[0],croper[1],0.25)
-        yy = np.arange(croper[1],croper[3],0.25)
-        
-    # Get the xFRF and yFRF vals #
-    xFRF,yFRF = np.meshgrid(xx,yy)    
+        xFRF = np.arange(croper[0],croper[1],0.25)
+        yFRF = np.arange(croper[1],croper[3],0.25)
+         
+    xx,yy = np.meshgrid(xFRF,yFRF)
     
     # Create a point cloud in FRF coords cropped to desired extent, and then call it #
     createFRFLas(lasDirec,croper)
     pc = pcManager(lasDirec+'/FRF.las')
     
     # Get the time #
-    time = pc.gridPC_Slocum(xx,yy,z_val='time',function='mean')
-    
+    local = pytz.timezone("America/New_York")
+    naive = datetime.strptime(date+" 12:00:00", "%Y-%m-%d %H:%M:%S")
+    local_dt = local.localize(naive, is_dst=None) # This may be an hour off during DST, but doesn't mater much? #
+    utc_dt = local_dt.astimezone(pytz.utc)
+    time = float(nc.date2num(utc_dt,'seconds since 1970-01-01'))
+        
     # Grid the elevations #
-    elev = pc.gridPC_Slocum(xx,yy,z_val='z',function='min')
+    elev = pc.gridPC_Slocum(xFRF,yFRF,z_val='z',function='min')
+    elev[np.isnan(elev)] = int(-999)
+    # elev = ma.array(elev,mask=np.isnan(elev),fill_value=-999.99) # Make masked array #
+    elev = np.reshape(elev,[1,len(elev[:,0]),len(elev[0,:])]) # Reshape to add time dimension #
     
     # Convert FRF xy to lat lon #
-    lat,lon = utils.FRF2LL(xFRF,yFRF)
+    lat,lon = utils.FRF2LL(xx,yy)
     
     # Create the dictionary to be exported #
-    data = {'time':np.ndarray.flatten(time),
-            'xFRF':np.ndarray.flatten(xFRF),
-            'yFRF':np.ndarray.flatten(yFRF),
-            'lat':np.ndarray.flatten(lat),
-            'lon':np.ndarray.flatten(lon),
-            'elev':np.ndarray.flatten(elev)}
+    data = {'time':time,
+            'xFRF':xFRF,
+            'yFRF':yFRF,
+            'latitude':lat,
+            'longitude':lon,
+            'elevation':elev}
     
     # Get the yaml metadata files #
     dirname, filename = os.path.split(os.path.abspath(__file__)) # Get the directory to this file #
@@ -571,10 +596,88 @@ def exportNetCDF(lasDirec,croper='5km'):
     globalYaml = dirname+'/claris_Global.yml'
     
     # Create the NetCDF file #
-    p2nc.makenc_generic(lasDirec+'/FRFnc.nc', globalYaml, varYaml, data)
+    p2nc.makenc_generic(lasDirec+'/FRF_'+date+'.nc', globalYaml, varYaml, data)
+    
+ 
+    
+def calcAverageProfile(direcs,analysisLen,xi):
+    
+    def cropNormalizeGrid(transects1,xi):
+        
+        import copy       
+        
+        # Crop, normalize, and grid transects #
+        transects = []
+        transects_c = []
+        transects_c_n = []
+        transects_c_n_i = []
+        for t in transects1:
+            if max(t['Z'])>3.5 and min(t['Z'])<1: # Make sure looking at full profiles #
+                t_c = t[np.logical_and(t['Z']>=1,t['Z']<=3)] # Crop the transect #
+                
+                dx = np.diff(t_c['X'][~np.isnan(t_c['Z'])])
+                if len(dx)>0:
+                    if max(dx)<0.3: # Make sure there is not a bunch of missing data in the profile #
+                        t_c_n = copy.copy(t_c) # Normalize the transect #
+                        t_c_n['X'] = (t_c_n['X']-min(t_c_n['X']))/(max(t_c_n['X'])-min(t_c_n['X']))
+                        
+                        zi = np.interp(xi,t_c_n['X'],t_c_n['Z'])
+                        t_c_n_i = np.zeros([len(xi)],dtype=[('X','<f8'),('Z','<f8')])
+                        t_c_n_i['X'] = xi
+                        t_c_n_i['Z'] = zi
+                        
+                        
+                        transects.append(t)
+                        transects_c.append(t_c)
+                        transects_c_n.append(t_c_n)
+                        transects_c_n_i.append(t_c_n_i)
+ 
+            else:
+                pass
+            
+            
+        return transects,transects_c,transects_c_n,transects_c_n_i
     
     
+    transects_all = []
+    for direc in direcs:
+        # Create the cropped point cloud if it doesn't exist #
+        if not os.path.exists(direc+'/FRF_'+str(analysisLen)+'km.las'):
+            if analysisLen == 1:
+                croperU = 'frf'
+            else:
+                croperU = '5km'
+            createFRFLas(direc,croper=croperU)
+            os.rename(direc+'/FRF.las',direc+'/FRF_'+str(analysisLen)+'km.las')
+            
+        # Pull transects #
+        file = direc+'/FRF_'+str(analysisLen)+'km.las'
+        pc = pcManager(file)
+        transects1 = pc.createTransects(dy=5)
+        
+        transects,transects_c,transects_c_n,transects_c_n_i = cropNormalizeGrid(transects1,xi)
+        
+        # Average all profiles for this survey #
+        transect_mean = np.zeros([len(xi)],dtype=[('X','<f8'),('Z','<f8')])
+        transect_mean['X'] = xi
+        for x in range(0,len(xi)):
+            vals = [i['Z'][x] for i in transects_c_n_i]
+            transect_mean['Z'][x] = np.mean(vals)
+   
+                
+        transects_all.append(transect_mean)  
     
+    # Average all the mean profiles to get an overall mean profile #
+    transect_mean = np.zeros([len(xi)],dtype=[('X','<f8'),('Z','<f8')])
+    transect_mean['X'] = xi
+    for x in range(0,len(xi)):
+        vals = [i['Z'][x] for i in transects_all]
+        transect_mean['Z'][x] = np.mean(vals)
+    meanProf = transect_mean
+    
+    return meanProf
+
+
 
 
 class scarpManager():
@@ -622,7 +725,102 @@ class scarpManager():
             joblib.dump(clf, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-    def calcBTOverBf(self,xx,yy,dsm_pre,dsm_post,T,IDmethod,slopeMethod,regions_agg=None,regions_deg=None,file_pre=None,file_post=None,savedToes=None,clf='mixed_clf'):
+    def idDuneToe(self,T,method,clf='mixed_clf'):
+        '''
+        Method to extract dune toes from transects using a specified automated method from pyBeach.
+        Method is pretty much the same as the idScarpToesOnTransects() function in the calcBTOverBf method, 
+        which is lame, but oh well.
+        
+        args:
+            T: transects e.g. from pcManager.createTransects()
+            method: Method to extract dToe. Options are: 'ml','mc','rr','pd'
+            clf: optional, only used if method='ml'. pyBeach clf to use with ml method.
+            
+        returns:
+            toes: a list containing the dune toe locations.
+        
+        '''
+        
+        
+        def smooth(x,window_len=11,window='hanning'):
+                """smooth the data using a window with requested size.
+            
+                This method is based on the convolution of a scaled window with the signal.
+                The signal is prepared by introducing reflected copies of the signal 
+                (with the window size) in both ends so that transient parts are minimized
+                in the begining and end part of the output signal.
+            
+                input:
+                    x: the input signal 
+                    window_len: the dimension of the smoothing window; should be an odd integer
+                    window: the type of window from 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'
+                        flat window will produce a moving average smoothing.
+            
+                output:
+                    the smoothed signal
+            
+                example:
+            
+                t=linspace(-2,2,0.1)
+                x=sin(t)+randn(len(t))*0.1
+                y=smooth(x)
+            
+                see also: 
+            
+                numpy.hanning, numpy.hamming, numpy.bartlett, numpy.blackman, numpy.convolve
+                scipy.signal.lfilter
+            
+                """
+            
+                s=np.r_[x[window_len-1:0:-1],x,x[-2:-window_len-1:-1]]
+                #print(len(s))
+                if window == 'flat': #moving average
+                    w=np.ones(window_len,'d')
+                else:
+                    w=eval('np.'+window+'(window_len)')
+            
+                y=np.convolve(w/w.sum(),s,mode='valid')
+                return y[round(window_len/2-1):-round(window_len/2)]
+
+            
+        toes = [np.empty([0,3]),np.empty([0,3])]
+        for day in range(0,2):
+            for t in range(0,len(T[0])):
+                x = T[day][t]['X'][50:-1]
+                z = T[day][t]['Z'][50:-1]
+                if len(x)>0:
+                    z_smooth = smooth(z)
+                    pb = Profile(x,z_smooth)
+                    if method=='ml':
+                        toe = pb.predict_dunetoe_ml(clf)
+                    elif method=='contour': # Find where transect intersects 3 m contour #
+                        xi = np.linspace(min(x),max(x),1000)
+                        z = np.interp(xi,x[~np.isnan(z)],z[~np.isnan(z)])
+                        x = xi
+                        toe = np.where(abs(z-3) == min(abs(z-3)))[0]
+                    else:
+                        try:
+                            toe = eval('pb.predict_dunetoe_'+method+'()')
+                        except:
+                            toe = eval('pb.predict_dunetoe_'+method+'(toe_window_size=5)') # Error when using rr method that default window size too big, so manually change here #
+                    toe_x = x[toe[0]]
+                    toe_y = T[day][t]['Y'][0]
+                    toe_z = z[toe[0]]
+                    toes[day] = np.vstack([toes[day],np.hstack([toe_x,toe_y,toe_z])])
+                else:
+                    toes[day] = np.vstack([toes[day],np.hstack([np.nan,np.nan,np.nan])])
+                    
+                # plt.plot(x1,z1)
+                # plt.plot(toe_x,toe_z,'.')
+                # plt.show()
+                # plt.pause(1)
+                # plt.close('all')
+
+        return toes
+    
+    
+
+    def calcBTOverBf(self,xx,yy,dsm_pre,dsm_post,T,IDmethod,slopeMethod,regions_agg=None,regions_deg=None,file_pre=None,file_post=None,savedFile=None,clf='mixed_clf'):
         '''
         Method to calculate the BT/Bf value for a scarp. Method has a number of sub-methods to do this in parts; the results
         of each sub-method can be accessed as part of the class after this method is called.
@@ -644,7 +842,8 @@ class scarpManager():
             regions_agg and _deg: (optional) The extraction of change regions from the DoD can be quite time consuming, so if you have previously
                                   created and saved these regions, you can input them and skip the step of computing them here.
             file_pre and _post: (optional, only used if IDmethod="manual") Full path+filename to las point cloud files pre and post-storm
-            savedToes: (optional, only used if IDmethod='manual') saved scarpToes returned by running this class previously
+            savedFile: (optional, only used if IDmethod='manual') saved file returned by running this class previously. 
+                                                                   Useful if changing something and want to retain the dtoe picks already completed.
             clf: (optional, only used if IDmethod='ml') The pyBeach classifier type to use in the ml dune toe prediction. Options are
                                                         'barrier_island_clf','wave_embayed_clf','mixed_clf',or xxxxx_clf (if you have
                                                         made your own using the create_pyBeachClassifier function)
@@ -818,36 +1017,75 @@ class scarpManager():
             return toes_all
                 
         
-        def idScarpToesManually_OnTransects(scarpRegions,T_scarps):
-            toes_all = []
-            for ii in range(0,len(scarpRegions)):
-                toe_pre = np.empty([0,3])
-                toe_post = np.empty([0,3])
-                for i_t in range(0,len(T_scarps[ii][0])):
-                    fig,ax = plt.subplots(1)
-                    ax.plot(T_scarps[ii][0][i_t]['X'],T_scarps[ii][0][i_t]['Z'])
-                    ax.set_title('Pre, line '+str(i_t+1)+' of '+str(len(T_scarps[ii][0])))
-                    toe_pre1_1 = plt.ginput(n=1,timeout=-1)
-                    plt.close('all')
-                    toe_pre1 = [toe_pre1_1[0][0],T_scarps[ii][0][i_t]['Y'][0],toe_pre1_1[0][1]]
-                    toe_pre = np.vstack([toe_pre,toe_pre1])
-
-                    fig,ax = plt.subplots(1)
-                    ax.plot(T_scarps[ii][1][i_t]['X'],T_scarps[ii][1][i_t]['Z'])
-                    ax.set_title('Post, line '+str(i_t+1)+' of '+str(len(T_scarps[ii][0])))                    
-                    toe_post1_1 = plt.ginput(n=1,timeout=-1)
-                    plt.close('all')
-                    toe_post1 = [toe_post1_1[0][0],T_scarps[ii][0][i_t]['Y'][0],toe_post1_1[0][1]]
-                    toe_post = np.vstack([toe_post,toe_post1])   
-                toes = [toe_pre,toe_post]
-                toes_all.append(toes)
-                del toes
+        def idScarpToesManually_OnTransects(scarpRegions,T_scarps,savedFile=None):
+            toes_all = []          
+            for ii in range(0,len(scarpRegions)): 
+                if savedFile:
+                    regions_saved = savedFile.scarpRegions
+                    for rr in range(0,len(regions_saved)):
+                        if len(scarpRegions[ii])==len(regions_saved[rr]):
+                            if sum(scarpRegions[ii].flatten() - regions_saved[rr].flatten())==0:
+                                test = 1
+                                break
+                            else:
+                                test = 0
+                        else:
+                            test = 0
+                else:
+                    test==0
+                        
+                if test == 1:
+                    toes_all.append(savedFile.scarpToes[rr])
+                    self.T_scarps[ii] = savedFile.T_scarps[rr]
+                else:
+                    toe_pre = np.empty([0,3])
+                    toe_post = np.empty([0,3])
+                    for i_t in range(0,len(T_scarps[ii][0])):
+                        fig,ax = plt.subplots(1)
+                        ax.plot(T_scarps[ii][0][i_t]['X'],T_scarps[ii][0][i_t]['Z'])
+                        ax.set_title('Pre, line '+str(i_t+1)+' of '+str(len(T_scarps[ii][0])))
+                        toe_pre1_1 = plt.ginput(n=1,timeout=-1)
+                        plt.close('all')
+                        toe_pre1 = [toe_pre1_1[0][0],T_scarps[ii][0][i_t]['Y'][0],toe_pre1_1[0][1]]
+                        toe_pre = np.vstack([toe_pre,toe_pre1])
+    
+                        fig,ax = plt.subplots(1)
+                        ax.plot(T_scarps[ii][1][i_t]['X'],T_scarps[ii][1][i_t]['Z'])
+                        ax.set_title('Post, line '+str(i_t+1)+' of '+str(len(T_scarps[ii][0])))                    
+                        toe_post1_1 = plt.ginput(n=1,timeout=-1)
+                        plt.close('all')
+                        toe_post1 = [toe_post1_1[0][0],T_scarps[ii][0][i_t]['Y'][0],toe_post1_1[0][1]]
+                        toe_post = np.vstack([toe_post,toe_post1])   
+                    toes = [toe_pre,toe_post]
+                    toes_all.append(toes)
+                    del toes
             
             return toes_all
                 
+        
+        def checkScarpRegionsForBerms(scarpRegions,T_scarps,toes):
+            
+            iBad = []
+            for i in range(0,len(scarpRegions)):
+                preStormToeX = [toes[i][0][p][0] for p in range(0,len(toes[i][0]))]
+                minRegionX = min(scarpRegions[i][:,0])
                 
-
-                
+                # If the  min x value of the erosion region is offshore of the pre-storm toe for over half the transects
+                # crossing the region, assume this is a berm erosion region and get rid of it #
+                prop = len(np.where(preStormToeX>minRegionX)[0])/len(preStormToeX)
+                if prop>0.5:
+                    pass
+                else:
+                    iBad.append(i)
+            if len(iBad)>0:      
+                scarpRegions = [scarpRegions[i] for i in range(0,len(scarpRegions)) if i not in iBad]
+                T_scarps = [T_scarps[i] for i in range(0,len(T_scarps)) if i not in iBad]
+                toes = [toes[i] for i in range(0,len(toes)) if i not in iBad]
+            else:
+                pass
+            
+            return scarpRegions,T_scarps,toes
+            
 
         def calcBf(T_scarps,toes,method):
             
@@ -898,7 +1136,7 @@ class scarpManager():
                 self.Bf[ii] = np.array(self.Bf[ii])[id_keep]
                 self.BT[ii] = np.array(self.BT[ii])[id_keep]
                 
-                # Remove transects where Bf substantiall different then neighbors- probbaly picked a scarp toe on a berm #
+                # Remove transects where Bf substantially different then neighbors- probbaly picked a scarp toe on a berm #
                 
                 
 
@@ -916,18 +1154,15 @@ class scarpManager():
         self.T_scarps = extractScarpTransects(self.scarpRegions)
         
         if IDmethod is 'manual':
-            if savedToes:
-                self.scarpToes = savedToes
-            else:
-                self.scarpToes = idScarpToesManually(file_pre,file_post,self.scarpRegions,self.T_scarps)
+            self.scarpToes = idScarpToesManually(file_pre,file_post,self.scarpRegions,self.T_scarps)
         elif IDmethod is 'manual_transects':
-            if savedToes:
-                self.scarpToes = savedToes
-            else:
-                self.scarpToes = idScarpToesManually_OnTransects(self.scarpRegions,self.T_scarps)
+            self.scarpToes = idScarpToesManually_OnTransects(self.scarpRegions,self.T_scarps,savedFile)
         else:
             self.scarpToes = idScarpToesOnTransects(self.T_scarps,IDmethod)  
-              
+        
+        scarpRegions_new,T_scarps_new,toes_new = checkScarpRegionsForBerms(self.scarpRegions,self.T_scarps,self.scarpToes) 
+        self.scarpRegions = scarpRegions_new; self.T_scarps = T_scarps_new; self.scarpToes = toes_new
+        
         self.Bf = calcBf(self.T_scarps,self.scarpToes,slopeMethod)
         self.BT = calcBT(self.scarpToes)
         filterVals()
