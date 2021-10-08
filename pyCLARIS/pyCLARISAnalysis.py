@@ -678,7 +678,82 @@ def calcAverageProfile(direcs,analysisLen=5,xi=np.arange(0,1.01,0.01)):
     return meanProf
 
 
-
+def calcAverageProfiles(direcs,analysisLen=5,xi=np.arange(0,1.01,0.01)):
+    
+    def cropNormalizeGrid(transects1,xi):
+        
+        import copy       
+        
+        # Crop, normalize, and grid transects #
+        transects = []
+        transects_c = []
+        transects_c_n = []
+        transects_c_n_i = []
+        for t in transects1:
+            if max(t['Z'])>3.5 and min(t['Z'])<1: # Make sure looking at full profiles #
+                t_c = t[np.logical_and(t['Z']>=1,t['Z']<=3)] # Crop the transect #
+                
+                dx = np.diff(t_c['X'][~np.isnan(t_c['Z'])])
+                if len(dx)>0:
+                    if max(dx)<0.3: # Make sure there is not a bunch of missing data in the profile #
+                        t_c_n = copy.copy(t_c) # Normalize the transect #
+                        t_c_n['X'] = (t_c_n['X']-min(t_c_n['X']))/(max(t_c_n['X'])-min(t_c_n['X']))
+                        
+                        zi = np.interp(xi,t_c_n['X'],t_c_n['Z'])
+                        t_c_n_i = np.zeros([len(xi)],dtype=[('X','<f8'),('Z','<f8')])
+                        t_c_n_i['X'] = xi
+                        t_c_n_i['Z'] = zi
+                        
+                        
+                        transects.append(t)
+                        transects_c.append(t_c)
+                        transects_c_n.append(t_c_n)
+                        transects_c_n_i.append(t_c_n_i)
+ 
+            else:
+                pass
+            
+            
+        return transects,transects_c,transects_c_n,transects_c_n_i
+    
+    # Make a Nx1000 array for the profiles at each longshore location (cols) for each survey (rows)
+    transects_all = np.empty([0,1000])
+    for direc in direcs:
+        # Create the cropped point cloud if it doesn't exist #
+        if not os.path.exists(direc+'/FRF_'+str(analysisLen)+'km.las'):
+            if analysisLen == 1:
+                croperU = 'frf'
+            else:
+                croperU = '5km'
+            createFRFLas(direc,croper=croperU)
+            os.rename(direc+'/FRF.las',direc+'/FRF_'+str(analysisLen)+'km.las')
+            
+        # Pull transects #
+        file = direc+'/FRF_'+str(analysisLen)+'km.las'
+        pc = pcManager(file)
+        yy = np.arange(-1000,4000,0.5)
+        transects1 = pc.createTransects(dy=5,y_min=min(yy),y_max=max(yy))
+        
+        transects_all = np.vstack([transects_all,np.array(transects1)])
+    
+    # Find the mean profile at each longshore location (col) #
+    meanProfs = []
+    for t in range(0,len(transects1)):
+        transects_here = [transects_all[ii,t] for ii in range(0,len(transects_all[:,0]))]
+        transects,transects_c,transects_c_n,transects_c_n_i = cropNormalizeGrid(transects_here,xi)
+            
+        # Average all profiles at this location #
+        transect_mean = np.zeros([len(xi)],dtype=[('X','<f8'),('Z','<f8')])
+        transect_mean['X'] = xi
+        for x in range(0,len(xi)):
+            vals = [i['Z'][x] for i in transects_c_n_i]
+            transect_mean['Z'][x] = np.mean(vals)
+            
+        meanProfs.append(transect_mean)
+        
+    return meanProfs
+   
+              
 
 class scarpManager():
     
@@ -1097,7 +1172,9 @@ class scarpManager():
                     if method=='lr':
                         x_beta = T_scarps[ii][0][t]['X'][T_scarps[ii][0][t]['X']>=toes[ii][0][t,0]]
                         z_beta = T_scarps[ii][0][t]['Z'][T_scarps[ii][0][t]['X']>=toes[ii][0][t,0]]
-                        icept,m = utils.linearRegression(x_beta[~np.isnan(z_beta)],z_beta[~np.isnan(z_beta)])
+                        b,yhat,r2,p_values = utils.linearRegression(x_beta[~np.isnan(z_beta)],z_beta[~np.isnan(z_beta)])
+                        icept=b[0]
+                        m=b[1]
                         Bf.append(-m)
                     elif method=='ep':
                         x_beta = T_scarps[ii][0][t]['X'][T_scarps[ii][0][t]['X']>=toes[ii][0][t,0]]
