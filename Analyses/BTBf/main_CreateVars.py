@@ -12,21 +12,24 @@ import pyCLARIS.pyCLARISAnalysis as claris
 
 
 for date in [ ['20210318','20210323'],['20200910','20200925'],['20200305','20200310'],['20191114','20191119'],
-              ['20191011','20191015'],['20190910','20190924'],['20190904','20190910'],['20180303','20180309'] ]:
+                ['20191011','20191015'],['20190910','20190924'],['20190904','20190910'],
+                ['20180303','20180309'],['20170922','20170929'],['20130306','20130320'] ]:
     
 
+        
     date_pre = date[0]
     date_post = date[1]
     savedVars = False
     analysisLen = 5
     direcs = ['/Users/frfuser/Documents/pyCLARIS_project/data/'+i for i in sorted(os.listdir('/Users/frfuser/Documents/pyCLARIS_project/data')) if date_pre in i or date_post in i]
 
+            
     if analysisLen == 1:
-        xx = np.arange(50,150,1)
-        yy = np.arange(0,1000,1)
+        xx = np.arange(50,150,0.5)
+        yy = np.arange(0,1000,0.5)
     elif analysisLen == 5:
-        xx = np.arange(-200,150,1)
-        yy = np.arange(-1000,4000,1)
+        xx = np.arange(-200,150,0.5)
+        yy = np.arange(0,4000,0.5)
         
 
     # Create or load in the DSMs and transects #
@@ -54,7 +57,8 @@ for date in [ ['20210318','20210323'],['20200910','20200925'],['20200305','20200
 
             # Pull xshore transects from the PC #
             print('Making transects')
-            transects = pc.createTransects(dy=5)
+            transects = pc.createTransects(dy=5,y_min=min(yy),y_max=max(yy))
+            # transects = pc.createTransects_fromDSM(xx,yy,dsm,dy=5)
 
             # Save the DSM and transects #
             dsms.append(dsm)
@@ -62,10 +66,10 @@ for date in [ ['20210318','20210323'],['20200910','20200925'],['20200305','20200
 
         # Extract areas of change and plot on pre-storm DEM and RGB image #
         print('Extracting regions')
-        regions_agg,regions_deg = claris.extractChangeAreas(xx,yy,dsms[0],dsms[1],thresh=0.25)
+        regions_agg,regions_deg = claris.extractChangeAreas(xx,yy,dsms[0],dsms[1],thresh=0.5)
         
         for val in ['regions_agg','regions_deg']:
-            with open('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/data/'+date_pre+'-'+date_post+'_'+str(analysisLen)+'km_'+val+'_0.25m.pkl','wb') as f:
+            with open('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/data/'+date_pre+'-'+date_post+'_'+str(analysisLen)+'km_'+val+'_0.5m.pkl','wb') as f:
                 pickle.dump(eval(val),f)
 
         for val in ['dsms','T']:
@@ -81,6 +85,35 @@ for date in [ ['20210318','20210323'],['20200910','20200925'],['20200305','20200
         f = open('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/data/'+date_pre+'-'+date_post+'_'+str(analysisLen)+'km_T.pkl','rb'); T = pickle.load(f)
         
 
+    # def plotPointCloudAndGriddedForAGUPoster():
+        # fig = plt.figure(figsize=(3.4,3))
+        # plt.rc('axes', labelsize=20)    # fontsize of the x and y labels
+        # plt.rc('xtick', labelsize=20)    # fontsize of the tick labels
+        # plt.rc('ytick', labelsize=20)    # fontsize of the tick labels
+        # plt.rc('legend', fontsize=16) 
+        # ax1 = plt.axes([0.25,0.62,0.6,0.35])
+        # ax1.scatter(pcData[100000:150000]['Y'],pcData[100000:150000]['X'],.1,pcData[100000:150000]['Z'],vmin=2,vmax=3)
+        # ax1.invert_yaxis()
+        # ax1.set_xlim(21.97378467517421, 34.34252082231811)
+        # ax1.set_ylim(91.74174349320019, 80.11063950014464)
+        # ax1.set_xticklabels([])
+        # ax1.text(22,80.5,'Point cloud',ha='left',va='top',fontweight='bold')
+        
+        # ax2 = plt.axes([0.25,0.25,0.6,0.35])
+        # h = ax2.pcolor(yy,xx,np.transpose(dsm),vmin=2,vmax=3)
+        # ax2.invert_yaxis()
+        # ax2.set_xlim(21.97378467517421, 34.34252082231811)
+        # ax2.set_ylim(91.74174349320019, 80.11063950014464)
+        # ax2.plot((25,25),(91.74174349320019, 80.11063950014464),'k--')
+        # ax2.plot((30,30),(91.74174349320019, 80.11063950014464),'k--')
+        # ax2.text(22,80.5,'Gridded DSM + profiles',ha='left',va='top',fontweight='bold')
+        # fig.text(0.05,0.6,'x-shore (m)',rotation=90,va='center',ha='center',fontsize=24)
+        # fig.text(0.5,0.05,'alongshore (m)',va='center',ha='center',fontsize=24)
+        
+        # cbax = plt.axes([0.87,0.4,0.05,0.3])
+        # fig.colorbar(h,cbax)
+        # fig.text(0.899,0.55,'Elev (m)',rotation=90,va='center',ha='center',fontsize=14)
+    
 
 
     # Plot the changes #
@@ -162,30 +195,22 @@ for date in [ ['20210318','20210323'],['20200910','20200925'],['20200305','20200
 
         ax3.pcolor(yy,xx,np.transpose(dsms[1]-dsms[0]),vmin=-1,vmax=1,cmap='seismic_r')    
         ax3.invert_yaxis()
-    ##    for region in regions_agg:
-    ##        ax3.plot(region[:,1],region[:,0],'c')
-    ##    for region in regions_deg:
-    ##        ax3.plot(region[:,1],region[:,0],'m')
 
 
-        ys = [T[0][i]['Y'][0] for i in range(0,len(T[0]))]
-        T_nums = [ [-800,-790,-780,-70],[190,200,210,220],[800,810,820,830],[1500,1510,1520,1530],[2000,2010,2020,2030],[3050,3060,3070,3080] ]
-        for i in range(0,6):
+        T_nums = [ [150,160,170,180],[350,360,370,380],[500,510,520,530],[650,660,670,680]]#,[800,810,820,830],[940,950,960,970] ]
+        for i in range(0,4):
             for t in range(0,len(T_nums[i])):
                 axx = eval('axt'+str(i+1)+'_'+str(t+1))
-                try:
-                    axx.plot(T[0][np.where(np.array(ys)==T_nums[i][t])[0][0]]['X'],T[0][np.where(np.array(ys)==T_nums[i][t])[0][0]]['Z'],'k-')
-                    axx.plot(T[1][np.where(np.array(ys)==T_nums[i][t])[0][0]]['X'],T[1][np.where(np.array(ys)==T_nums[i][t])[0][0]]['Z'],'--',color='grey')
-                    axx.set_ylim(0,9)
-                    ax3.plot(T[0][np.where(np.array(ys)==T_nums[i][t])[0][0]]['Y'],T[0][np.where(np.array(ys)==T_nums[i][t])[0][0]]['X'],'k-',linewidth=0.5)
-                except:
-                    pass
+                axx.plot(T[0][T_nums[i][t]]['X'],T[0][T_nums[i][t]]['Z'],'k-')
+                axx.plot(T[1][T_nums[i][t]]['X'],T[1][T_nums[i][t]]['Z'],'--',color='grey')
+                axx.set_ylim(0,9)
+                ax3.plot(T[0][T_nums[i][t]]['Y'],T[0][T_nums[i][t]]['X'],'k',linewidth=0.5) 
 
         plt.savefig('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/figs/'+date_pre+'-'+date_post+'_'+str(analysisLen)+'km_changesOverview.png',dpi=350)
 ##        plt.show()
 
-##    plotBothSurfacesAndChangeFig()
-##    changesOverviewFig()
+    plotBothSurfacesAndChangeFig()
+    changesOverviewFig()
 
 
 
@@ -194,20 +219,7 @@ for date in [ ['20210318','20210323'],['20200910','20200925'],['20200305','20200
 
 
 
-    ### ID scarps #
-    print('IDing scarps')
-    thresh_vertChangeU = 0.5
-    scarpLab = claris.scarpManager(thresh_vertChange=thresh_vertChangeU,thresh_longshoreContinuity=100,thresh_minimumElev=1.5,thresh_slope_after=35)
-    BTBf = scarpLab.calcBTOverBf(xx,yy,dsms[0],dsms[1],T,'pd',
-                                 regions_agg=None,regions_deg=None,file_pre=direcs[0]+'/FRF_'+str(analysisLen)+'km.las',file_post=direcs[1]+'/FRF_'+str(analysisLen)+'km.las')
-
-
-
-
-
-
-
-
+   
 
 ### Examine results #
 ##regions = scarpLab.scarpRegions
