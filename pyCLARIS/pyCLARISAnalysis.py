@@ -15,10 +15,11 @@ import pptk
 from pybeach.beach import Profile
 from scipy import ndimage
 from scipy.interpolate import interp1d
+from scipy.signal import find_peaks
+import shapely
 
 # Project imports #
 from . import coastalGeoUtils as utils
-
 
 def createFRFLas(lasDirec_or_lasFile,croper='frf'):
     '''
@@ -56,7 +57,9 @@ def createFRFLas(lasDirec_or_lasFile,croper='frf'):
         if croper=='frf':
             bounds = [-100,10000,0,1000]
         elif croper=='5km':
-            bounds = [-100,10000,-800,3995]
+            # bounds = [-100,10000,-800,3995]
+            bounds = [-100,10000,0,4000]
+            
         else:
             bounds = croper
     else:
@@ -362,7 +365,26 @@ class pcManager():
         return z_grid
 
 
+    def createTransects_fromDSM(self,xx,yy,dsm,dy=5):
         
+        minY = min(yy)
+        maxY = max(yy)
+        dy_dsm = abs(round((minY-maxY)/len(yy),1))
+        spacing = dy/dy_dsm
+        iUse = np.arange(0,len(yy),spacing)
+        
+        transects = []
+        for i in iUse:
+            data_t_f= np.zeros((len(xx)), dtype=[("X","<f8"),("Y","<f8"),("Z","<f8")])
+            data_t_f['X'] = xx
+            data_t_f['Y'] = np.tile(yy[int(i)],np.shape(data_t_f['X']))
+            data_t_f['Z'] = dsm[int(i),:]
+            
+            transects.append(data_t_f)
+            
+        return transects
+            
+    
     def createTransects(self,dy=5,y_min=None,y_max=None):
 
         '''
@@ -815,81 +837,126 @@ class scarpManager():
             toes: a list containing the dune toe locations.
         
         '''
-        
-        
-        def smooth(x,window_len=11,window='hanning'):
-                """smooth the data using a window with requested size.
-            
-                This method is based on the convolution of a scaled window with the signal.
-                The signal is prepared by introducing reflected copies of the signal 
-                (with the window size) in both ends so that transient parts are minimized
-                in the begining and end part of the output signal.
-            
-                input:
-                    x: the input signal 
-                    window_len: the dimension of the smoothing window; should be an odd integer
-                    window: the type of window from 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'
-                        flat window will produce a moving average smoothing.
-            
-                output:
-                    the smoothed signal
-            
-                example:
-            
-                t=linspace(-2,2,0.1)
-                x=sin(t)+randn(len(t))*0.1
-                y=smooth(x)
-            
-                see also: 
-            
-                numpy.hanning, numpy.hamming, numpy.bartlett, numpy.blackman, numpy.convolve
-                scipy.signal.lfilter
-            
-                """
-            
-                s=np.r_[x[window_len-1:0:-1],x,x[-2:-window_len-1:-1]]
-                #print(len(s))
-                if window == 'flat': #moving average
-                    w=np.ones(window_len,'d')
-                else:
-                    w=eval('np.'+window+'(window_len)')
-            
-                y=np.convolve(w/w.sum(),s,mode='valid')
-                return y[round(window_len/2-1):-round(window_len/2)]
 
-            
+        print('This is a test')    
         toes = [np.empty([0,3]),np.empty([0,3])]
         for day in range(0,2):
             for t in range(0,len(T[0])):
-                x = T[day][t]['X'][50:-1]
-                z = T[day][t]['Z'][50:-1]
-                if len(x)>0:
-                    z_smooth = smooth(z)
-                    pb = Profile(x,z_smooth)
-                    if method=='ml':
-                        toe = pb.predict_dunetoe_ml(clf)
-                    elif method=='contour': # Find where transect intersects 3 m contour #
-                        xi = np.linspace(min(x),max(x),1000)
-                        z = np.interp(xi,x[~np.isnan(z)],z[~np.isnan(z)])
-                        x = xi
-                        toe = np.where(abs(z-3) == min(abs(z-3)))[0]
-                    else:
-                        try:
+                
+                xx = T[day][t]['X']
+                zz = T[day][t]['Z']
+                
+                if len(xx)>1:
+                
+                    try:
+                        pb = Profile(xx[np.logical_and(zz>=1,zz<=5)],zz[np.logical_and(zz>=1,zz<=5)])
+                    except:
+                        toe_x = np.nan
+                        toe_y = np.nan
+                        toe_z = np.nan
+                    else:                                          
+                        if method=='ml':
+                            toe = pb.predict_dunetoe_ml(clf)
+                        elif method=='contour': # Find where transect intersects 3 m contour #
+                            xi = np.linspace(min(xx),max(xx),1000)
+                            z = np.interp(xi,xx[~np.isnan(zz)],zz[~np.isnan(zz)])
+                            x = xi
+                            toe = np.where(abs(z-3) == min(abs(z-3)))[0]
+                        elif method=='pd':
+                            toe = pb.predict_dunetoe_pd(dune_crest=None,shoreline=None)
+                        elif method=='mc':                           
+                            def smooth(x,window_len=7,window='hanning'):
+                                s=np.r_[x[window_len-1:0:-1],x,x[-2:-window_len-1:-1]]
+                                #print(len(s))
+                                if window == 'flat': #moving average
+                                    w=np.ones(window_len,'d')
+                                else:
+                                    w=eval('np.'+window+'(window_len)')
+                            
+                                y=np.convolve(w/w.sum(),s,mode='valid')
+                                return y[round(window_len/2-1):-round(window_len/2)]
+                            
+                            xx1 = xx[np.logical_and(zz>=1,zz<=5)]
+                            zz1 = zz[np.logical_and(zz>=1,zz<=5)]
+                            zz_smooth = smooth(zz1)
+                            dx = np.diff(zz1)/np.diff(xx1)
+                            dx2 = np.diff(dx)/np.diff(xx1[1:len(xx1)])
+                            dx_smooth = np.diff(zz_smooth)/np.diff(xx1)
+                            dx2_smooth = np.diff(dx_smooth)/np.diff(xx1[1:len(xx1)])
+                            
+                            i_subset = np.where(np.logical_and(zz1>=1,zz1<=3))[0]
+                            i_subset=i_subset+2
+                                                   
+                            iMax = np.where(dx2==max(dx2[i_subset]))[0]
+                            iMax_smooth = np.where(dx2_smooth==max(dx2_smooth[i_subset]))[0]
+                            iMax_use = iMax+2
+                            iMax_use_smooth = iMax_smooth+2
+                            toe = iMax_use_smooth
+        
+                            # toe = pb.predict_dunetoe_mc()
+                        
+                        elif method=='mc_supervised':
+                                
+                                # Max curvature #
+                            def smooth(x,window_len=7,window='hanning'):
+                                s=np.r_[x[window_len-1:0:-1],x,x[-2:-window_len-1:-1]]
+                                #print(len(s))
+                                if window == 'flat': #moving average
+                                    w=np.ones(window_len,'d')
+                                else:
+                                    w=eval('np.'+window+'(window_len)')
+                            
+                                y=np.convolve(w/w.sum(),s,mode='valid')
+                                return y[round(window_len/2-1):-round(window_len/2)]   
+                              
+                            xx = xx[~np.isnan(zz)]
+                            zz = zz[~np.isnan(zz)]  
+                            
+                            xi = np.arange(min(xx),max(xx),1)
+                            zi = np.interp(xi,xx,zz)
+                            xx = xi
+                            zz = zi
+                            
+                            xx1 = xx#[np.logical_and(zz>=1,zz<=5)]
+                            zz1 = zz#[np.logical_and(zz>=1,zz<=5)]
+                            zz_smooth = zz1#smooth(zz1)
+                            iSub = np.logical_and(zz_smooth>=1.5,zz_smooth<=5)
+                            dx = np.gradient(xx1, xx1)  # first derivatives
+                            dy = np.gradient(zz_smooth, xx1)                
+                            d2x = np.gradient(dx, xx1)  # second derivatives
+                            d2y = np.gradient(dy, xx1)                
+                            curvature = d2y / ((1 + dy ** 2)) ** 1.5  # curvature     
+                            curvature_sub = curvature[iSub]
+                            toe = np.where(curvature==max(curvature_sub))[0]
+                            
+                            # fig,ax = plt.subplots(2,1,sharex=True,figsize=(5,6))
+                            # ax[0].plot(xx,zz)
+                            # ax[0].plot(xx1,zz_smooth)
+                            # ax[0].plot(xx1[toe],zz_smooth[toe],'k.')            
+                            # ax[1].plot(xx1[iSub],curvature[iSub])
+                            # ax[1].plot(xx1[toe],curvature[toe],'k.')  
+                            # plt.pause(0.1)
+                            # fig.show()
+                            # yn = input('Satisfied with this dune toe pick? y or n: ')
+                            # if yn=='y':
+                            #     pass
+                            # else:
+                            #     toe_manual1 = plt.ginput(1)
+                            #     toe = np.where(abs(xx1-toe_manual1[0][0])==min(abs(xx1-toe_manual1[0][0])))[0]
+                            # plt.close('all')
+                        else:
                             toe = eval('pb.predict_dunetoe_'+method+'()')
-                        except:
-                            toe = eval('pb.predict_dunetoe_'+method+'(toe_window_size=5)') # Error when using rr method that default window size too big, so manually change here #
-                    toe_x = x[toe[0]]
+                        
+                    toe_x = xx[toe]#[np.logical_and(zz>=1,zz<=5)][toe]
                     toe_y = T[day][t]['Y'][0]
-                    toe_z = z[toe[0]]
+                    toe_z = zz[toe]#[np.logical_and(zz>=1,zz<=5)][toe]
                     toes[day] = np.vstack([toes[day],np.hstack([toe_x,toe_y,toe_z])])
                 else:
-                    toes[day] = np.vstack([toes[day],np.hstack([np.nan,np.nan,np.nan])])
-                    
-                # plt.plot(x1,z1)
-                # plt.plot(toe_x,toe_z,'.')
-                # plt.show()
-                # plt.pause(1)
-                # plt.close('all')
+                    toe_x = np.nan
+                    toe_y = np.nan
+                    toe_z = np.nan
+                    toes[day] = np.vstack([toes[day],np.hstack([toe_x,toe_y,toe_z])])
+
 
         return toes
     
@@ -951,7 +1018,7 @@ class scarpManager():
                 z = []
                 for i in reg:
                     z.append(dsm_pre[np.where(yy==i[1])[0][0],np.where(xx==i[0])[0][0]])
-                if all(np.array(z)[~np.isnan(z)]>self.thresh_minimumElev):
+                if any(np.array(z)[~np.isnan(z)]>self.thresh_minimumElev):
                     regions_deg2.append(reg)
 
             return regions_deg2
@@ -975,7 +1042,7 @@ class scarpManager():
                     z = T_int[1][i]['Z'][i_use]
                     dzdx = np.diff(z)/np.diff(x)
                     ang = np.degrees(np.tan(dzdx))
-                    if max(abs(ang))>self.thresh_slope_after:
+                    if np.nanmax(abs(ang))>self.thresh_slope_after:
                         i_scarp.append(i_int[i])
 
                 T_scarp = [[T[0][i] for i in i_scarp],[T[1][i] for i in i_scarp]]
@@ -990,72 +1057,169 @@ class scarpManager():
 
         def idScarpToesOnTransects(T_scarps,method):
             
-            def smooth(x,window_len=11,window='hanning'):
-                """smooth the data using a window with requested size.
-            
-                This method is based on the convolution of a scaled window with the signal.
-                The signal is prepared by introducing reflected copies of the signal 
-                (with the window size) in both ends so that transient parts are minimized
-                in the begining and end part of the output signal.
-            
-                input:
-                    x: the input signal 
-                    window_len: the dimension of the smoothing window; should be an odd integer
-                    window: the type of window from 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'
-                        flat window will produce a moving average smoothing.
-            
-                output:
-                    the smoothed signal
-            
-                example:
-            
-                t=linspace(-2,2,0.1)
-                x=sin(t)+randn(len(t))*0.1
-                y=smooth(x)
-            
-                see also: 
-            
-                numpy.hanning, numpy.hamming, numpy.bartlett, numpy.blackman, numpy.convolve
-                scipy.signal.lfilter
-            
-                """
-            
-                s=np.r_[x[window_len-1:0:-1],x,x[-2:-window_len-1:-1]]
-                #print(len(s))
-                if window == 'flat': #moving average
-                    w=np.ones(window_len,'d')
-                else:
-                    w=eval('np.'+window+'(window_len)')
-            
-                y=np.convolve(w/w.sum(),s,mode='valid')
-                return y[round(window_len/2-1):-round(window_len/2)]
-
-            
             toes_all = []
             for T_scarp in T_scarps:
             
                 toes = [np.empty([0,3]),np.empty([0,3])]
                 for day in range(0,2):
                     for t in range(0,len(T_scarp[0])):
-                        # x1= T_scarp[day][t]['X']
-                        # z1 = T_scarp[day][t]['Z']
-                        x = T_scarp[day][t]['X'][50:-1]
-                        z = T_scarp[day][t]['Z'][50:-1]
-                        z_smooth = smooth(z)
-                        pb = Profile(x,z_smooth)
+                        
+                        xx = T_scarp[day][t]['X']
+                        zz = T_scarp[day][t]['Z']
+                        
+                        pb = Profile(xx[np.logical_and(zz>=1,zz<=5)],zz[np.logical_and(zz>=1,zz<=5)])
+                                       
                         if method=='ml':
                             toe = pb.predict_dunetoe_ml(clf)
+                            toe = toe[0]
+                        elif method=='contour': # Find where transect intersects 3 m contour #
+                            xi = np.linspace(min(xx),max(xx),1000)
+                            z = np.interp(xi,xx[~np.isnan(zz)],zz[~np.isnan(zz)])
+                            x = xi
+                            toe = np.where(abs(z-3) == min(abs(z-3)))[0]
+                        elif method=='pd':
+                            toe = pb.predict_dunetoe_pd(dune_crest=None,shoreline=None)
+                        elif method=='mc':                           
+                            
+                            # Brodie and Spore #
+                              def smooth(x,window_len=7,window='hanning'):
+                                  s=np.r_[x[window_len-1:0:-1],x,x[-2:-window_len-1:-1]]
+                                  #print(len(s))
+                                  if window == 'flat': #moving average
+                                      w=np.ones(window_len,'d')
+                                  else:
+                                      w=eval('np.'+window+'(window_len)')
+                            
+                                  y=np.convolve(w/w.sum(),s,mode='valid')
+                                  return y[round(window_len/2-1):-round(window_len/2)]
+                            
+                              xx = xx[~np.isnan(zz)]
+                              zz = zz[~np.isnan(zz)]
+                              zz = smooth(zz)
+                              x_high = xx[np.where(zz==max(zz))[0][0]]
+                              z_high = zz[np.where(zz==max(zz))[0][0]]
+                              try:
+                                x_low = utils.transectElevIntercept(0.5,xx,zz)
+                                z_low = np.interp(x_low,xx,zz)
+                              except IndexError:
+                                x_low = xx[-1]
+                                z_low = zz[-1]
+                              m = (z_high-z_low)/(x_high-x_low)
+                              b = z_high-(m*x_high)
+                              yhat = (m*xx[np.where(zz==z_high)[0][0]:np.where(zz==z_low)[0][0]])+b           
+                              dist = yhat-zz[np.where(zz==z_high)[0][0]:np.where(zz==z_low)[0][0]]
+                              firstGuess = np.where(dist==max(dist))[0]
+                              iSub = np.where(abs(xx-xx[firstGuess])<=5)[0]
+                          
+                              dx = np.gradient(xx, xx)  # first derivatives
+                              dy = np.gradient(zz, xx)
+                              d2x = np.gradient(dx, xx)  # second derivatives
+                              d2y = np.gradient(dy, xx)
+                              curvature = d2y / ((1 + dy ** 2)) ** 1.5  # curvature
+                              curvature_sub = curvature[iSub]
+                              toe = np.where(curvature==max(curvature_sub))[0]
+                              
+                              
+                              # fig,ax = plt.subplots(2,1,sharex=True)
+                              # ax[0].plot(xx,zz)
+                              # ax[0].plot(xx[toe],zz[toe],'k.')  
+                              # ax[1].plot(xx,curvature)
+                              # ax[1].plot(xx[iSub],curvature_sub)
+                              # ax[1].plot(xx[toe],curvature[toe],'k.')  
+                              # plt.pause(0.1)
+                              # fig.show()
+                              # yn = input('Satisfied with this dune toe pick? y or n: ')
+                              # if yn=='y':
+                              #     pass
+                              # else:
+                              #     toe_manual1 = plt.ginput(1)
+                              #     toe = np.where(abs(xx-toe_manual1[0][0])==min(abs(xx-toe_manual1[0][0])))[0]
+                              # plt.close('all')
+                            
+                            
+                            # # Max curvature #
+                            # def smooth(x,window_len=7,window='hanning'):
+                            #     s=np.r_[x[window_len-1:0:-1],x,x[-2:-window_len-1:-1]]
+                            #     #print(len(s))
+                            #     if window == 'flat': #moving average
+                            #         w=np.ones(window_len,'d')
+                            #     else:
+                            #         w=eval('np.'+window+'(window_len)')
+                            
+                            #     y=np.convolve(w/w.sum(),s,mode='valid')
+                            #     return y[round(window_len/2-1):-round(window_len/2)]   
+                            
+                            # xx1 = xx[np.logical_and(zz>=1,zz<=4)]
+                            # zz1 = zz[np.logical_and(zz>=1,zz<=4)]
+                            # zz_smooth = smooth(zz1)
+                            # # iSub = np.logical_and(zz_smooth>=2,zz_smooth<=4)
+                            # dx = np.gradient(xx1, xx1)  # first derivatives
+                            # dy = np.gradient(zz_smooth, xx1)                
+                            # d2x = np.gradient(dx, xx1)  # second derivatives
+                            # d2y = np.gradient(dy, xx1)                
+                            # curvature = d2y / ((1 + dy ** 2)) ** 1.5  # curvature     
+                            # # curvature_sub = curvature[iSub]
+                            # toe = np.where(curvature==max(curvature))[0]
+                            
+                         
+                        
+                        elif method=='mc_supervised':
+                            
+                            # Max curvature #
+                            def smooth(x,window_len=7,window='hanning'):
+                                s=np.r_[x[window_len-1:0:-1],x,x[-2:-window_len-1:-1]]
+                                #print(len(s))
+                                if window == 'flat': #moving average
+                                    w=np.ones(window_len,'d')
+                                else:
+                                    w=eval('np.'+window+'(window_len)')
+                            
+                                y=np.convolve(w/w.sum(),s,mode='valid')
+                                return y[round(window_len/2-1):-round(window_len/2)]   
+                              
+                            xx = xx[~np.isnan(zz)]
+                            zz = zz[~np.isnan(zz)]  
+                            
+                            xi = np.arange(min(xx),max(xx),1)
+                            zi = np.interp(xi,xx,zz)
+                            xx = xi
+                            zz = zi
+                            
+                            xx1 = xx#[np.logical_and(zz>=1,zz<=5)]
+                            zz1 = zz#[np.logical_and(zz>=1,zz<=5)]
+                            zz_smooth = zz1#smooth(zz1)
+                            iSub = np.logical_and(zz_smooth>=1.5,zz_smooth<=5)
+                            dx = np.gradient(xx1, xx1)  # first derivatives
+                            dy = np.gradient(zz_smooth, xx1)                
+                            d2x = np.gradient(dx, xx1)  # second derivatives
+                            d2y = np.gradient(dy, xx1)                
+                            curvature = d2y / ((1 + dy ** 2)) ** 1.5  # curvature     
+                            curvature_sub = curvature[iSub]
+                            toe = np.where(curvature==max(curvature_sub))[0]
+                            
+                            # fig,ax = plt.subplots(2,1,sharex=True,figsize=(5,6))
+                            # ax[0].plot(xx,zz)
+                            # ax[0].plot(xx1,zz_smooth)
+                            # ax[0].plot(xx1[toe],zz_smooth[toe],'k.')            
+                            # ax[1].plot(xx1[iSub],curvature[iSub])
+                            # ax[1].plot(xx1[toe],curvature[toe],'k.')  
+                            # plt.pause(0.1)
+                            # fig.show()
+                            # yn = input('Satisfied with this dune toe pick? y or n: ')
+                            # if yn=='y':
+                            #     pass
+                            # else:
+                            #     toe_manual1 = plt.ginput(1)
+                            #     toe = np.where(abs(xx1-toe_manual1[0][0])==min(abs(xx1-toe_manual1[0][0])))[0]
+                            # plt.close('all')
+                            
                         else:
                             toe = eval('pb.predict_dunetoe_'+method+'()')
-                        toe_x = x[toe[0]]
+                        
+                        toe_x = xx[toe]#[np.logical_and(zz>=1,zz<=5)][toe]
                         toe_y = T_scarp[day][t]['Y'][0]
-                        toe_z = z[toe[0]]
+                        toe_z = zz[toe]#[np.logical_and(zz>=1,zz<=5)][toe]
                         toes[day] = np.vstack([toes[day],np.hstack([toe_x,toe_y,toe_z])])
-                        # plt.plot(x1,z1)
-                        # plt.plot(toe_x,toe_z,'.')
-                        # plt.show()
-                        # plt.pause(1)
-                        # plt.close('all')
 
                 toes_all.append(toes)
 
@@ -1138,26 +1302,59 @@ class scarpManager():
             return toes_all
                 
         
-        def checkScarpRegionsForBerms(scarpRegions,T_scarps,toes):
+        def checkRetreatRegions(scarpRegions,T_scarps,toes):
             
+            # Check to make sure erosion region is landward of
+            # the pre-storm dune toe at each transect. If erosion region
+            # is seaward of the pre-storm toe, this is beach erosion
+            # and we should throw out that region. #
             iBad = []
             for i in range(0,len(scarpRegions)):
-                preStormToeX = [toes[i][0][p][0] for p in range(0,len(toes[i][0]))]
-                minRegionX = min(scarpRegions[i][:,0])
+                iBad_t = []
+                for ii in range(0,len(T_scarps[i][0])):
+                    xx = T_scarps[i][0][ii]['X']
+                    yy = T_scarps[i][0][ii]['Y']
+                    toe_x = toes[i][0][ii][0]
+                    toe_x_post = toes[i][1][ii][0]
+
+                    toe_dx = toe_x_post-toe_x
+                    
+                    coords = [(xx[i],yy[i]) for i in range(0,len(xx))]
+                    transect = shapely.geometry.LineString(coords)                    
+                    region = shapely.geometry.Polygon(scarpRegions[i])
+                    cross = transect.intersection(region)
+                    try: # Throws an error when the region intersects the transect multiple times #
+                        cross_minx = min(cross.coords.xy[0])
+                    except:
+                        mins = [min(cross[i].coords.xy[0]) for i in range(0,len(cross))]
+                        cross_minx = min(mins)
+        
+                    if cross_minx>toe_x or toe_dx>-0.5:
+                        iBad_t.append(ii)
+     
+
+##                for iii in sorted(iBad_t, reverse=True):
+##                    T_scarps[i][0] = np.delete(T_scarps[i][0],iii)
+##                    T_scarps[i][1] = np.delete(T_scarps[i][1],iii)
+##                    toes[i][0] = np.delete(toes[i][0],iii,axis=0)
+##                    toes[i][1] = np.delete(toes[i][1],iii,axis=0)
+##                    
+            
                 
-                # If the  min x value of the erosion region is offshore of the pre-storm toe for over half the transects
-                # crossing the region, assume this is a berm erosion region and get rid of it #
-                prop = len(np.where(preStormToeX>minRegionX)[0])/len(preStormToeX)
-                if prop>0.5:
-                    pass
-                else:
+                    
+                prop = len(iBad_t)/len(T_scarps[i][0])#len(toes[i][0])
+                if prop>0.5: #<5:   
                     iBad.append(i)
-            if len(iBad)>0:      
+                else:
+                    pass
+            
+            if len(iBad)>0:
                 scarpRegions = [scarpRegions[i] for i in range(0,len(scarpRegions)) if i not in iBad]
                 T_scarps = [T_scarps[i] for i in range(0,len(T_scarps)) if i not in iBad]
                 toes = [toes[i] for i in range(0,len(toes)) if i not in iBad]
             else:
                 pass
+                        
             
             return scarpRegions,T_scarps,toes
             
@@ -1196,24 +1393,20 @@ class scarpManager():
             for ii in range(0,len(toes)):
                 BT = -((toes[ii][1][:,2]-toes[ii][0][:,2])/(toes[ii][1][:,0]-toes[ii][0][:,0]))
                 BT_all.append(BT)
-
+  
             return BT_all
         
         
-        def filterVals():
+        def checkForAnomalies():
             
+            # Flag any transects where the dune toe is extracted to have advanced (probably a bad pick) #
+            forwardFlag = []
             for ii in range(0,len(self.scarpToes)):
                 
-                # Remove Transects where scarp toe moved down and forward- probably an anomolous scarp toe pick(s) #
-                id_keep = self.scarpToes[ii][1][:,0]-self.scarpToes[ii][0][:,0]<0 # Remove anomolous picks that show scarp lowering and advance #
-                self.T_scarps[ii][0] = np.array(self.T_scarps[ii][0])[id_keep]
-                self.T_scarps[ii][1] = np.array(self.T_scarps[ii][1])[id_keep]
-                self.scarpToes[ii][0] = np.array(self.scarpToes[ii][0])[id_keep]
-                self.scarpToes[ii][1] = np.array(self.scarpToes[ii][1])[id_keep]
-                self.Bf[ii] = np.array(self.Bf[ii])[id_keep]
-                self.BT[ii] = np.array(self.BT[ii])[id_keep]
+                id_bad = np.where(self.scarpToes[ii][1][:,0]-self.scarpToes[ii][0][:,0]>0)[0]
+                forwardFlag.append(id_bad)
                 
-                # Remove transects where Bf substantially different then neighbors- probbaly picked a scarp toe on a berm #
+            return forwardFlag
                 
                 
 
@@ -1230,19 +1423,19 @@ class scarpManager():
         self.scarpRegions = idScarpRegions(regions_agg,regions_deg)
         self.T_scarps = extractScarpTransects(self.scarpRegions)
         
-        if IDmethod is 'manual':
+        if IDmethod == 'manual':
             self.scarpToes = idScarpToesManually(file_pre,file_post,self.scarpRegions,self.T_scarps)
-        elif IDmethod is 'manual_transects':
+        elif IDmethod == 'manual_transects':
             self.scarpToes = idScarpToesManually_OnTransects(self.scarpRegions,self.T_scarps,savedFile)
         else:
             self.scarpToes = idScarpToesOnTransects(self.T_scarps,IDmethod)  
         
-        scarpRegions_new,T_scarps_new,toes_new = checkScarpRegionsForBerms(self.scarpRegions,self.T_scarps,self.scarpToes) 
+        scarpRegions_new,T_scarps_new,toes_new = checkRetreatRegions(self.scarpRegions,self.T_scarps,self.scarpToes) 
         self.scarpRegions = scarpRegions_new; self.T_scarps = T_scarps_new; self.scarpToes = toes_new
         
         self.Bf = calcBf(self.T_scarps,self.scarpToes,slopeMethod)
         self.BT = calcBT(self.scarpToes)
-        filterVals()
+        self.forwardFlag = checkForAnomalies()
         self.BTBf = calcRatio(self.Bf,self.BT)
         return self.BTBf
 
