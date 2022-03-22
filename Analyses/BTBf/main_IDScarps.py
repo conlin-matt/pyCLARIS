@@ -1,5 +1,6 @@
 # Standard library imports #
 import os
+os.chdir('/Users/frfuser/Documents/pyCLARIS_project')
 
 # 3rd party imports #
 import matplotlib.pyplot as plt
@@ -74,7 +75,7 @@ for date in [ ['20210318','20210323'],['20200910','20200925'],['20191114','20191
     
     
     if len(scarpLab.BTBf)>0:
-        with open('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/data/'+date_pre+'-'+date_post+'_'+str(analysisLen)+'km_scarpResults_'+scarpToeMethod+'.pkl','wb') as f:
+        with open('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/data/'+date_pre+'-'+date_post+'_'+str(analysisLen)+'km_scarpResults_'+scarpToeMethod+'2.pkl','wb') as f:
             pickle.dump(scarpLab,f)
     
     

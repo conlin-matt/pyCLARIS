@@ -833,7 +833,7 @@ def examineAndPlot_VarsVsBT_AllWays():
     for file in files_use:
         
         results = pd.DataFrame(columns=['BT','Bf','$Z_{Toe}$ (m)','Post-storm toe elev (m)','$Bf_{post}$','dx (m)','dx (m, contour)',
-                                'dz (m)','$\B_{Dune}$','Bf/Bd ',
+                                'dz (m)','dz (m, contour)','$\B_{Dune}$','$\Delta B_f$','$Z_{eroded}$',
                                 'F (m)','W (m)','t_i (hr)','$max(H_s)$ (m)','\sumE (MJh/m^2)','TWL_ref (m)'
                                 '$\Delta V_B$ ($m^3/m$)','$\Delta V_D$ ($m^3/m$)','Dune Height (m)'])
         bdate = int(file[0:8])
@@ -925,20 +925,36 @@ def examineAndPlot_VarsVsBT_AllWays():
                     cumE = np.trapz((1/16)*1025*9.81*Hs[~np.isnan(Hs)]**2,np.array(t_sec)[~np.isnan(Hs)])/3600/1000000 #units are MJh/m^2 #
                     
                     # Calc TWL freeboard #
-                    twl = hydro.calcTWL(Bf_here,exceedance=16)
+                    twl = hydro.calcTWL(Bf_here,exceedance=2)
                     twl_ref = hydro.calcTWL(0.1,exceedance=2)
                     F = max(twl[:,1])-toe_pre
+
+                    if F<-0.9 and BT_here<-0.4:
+                        print('F='+str(F)+', BT='+str(BT_here))
+                        fig,ax = plt.subplots(1)
+                        ax.plot(T_scarps[scarp][0][ii]['X'],T_scarps[scarp][0][ii]['Z'],'k')
+                        ax.plot(T_scarps[scarp][1][ii]['X'],T_scarps[scarp][1][ii]['Z'],'grey')
+                        ax.plot(scarpToes[scarp][0][ii][0],scarpToes[scarp][0][ii][2],'ko')
+                        ax.plot(scarpToes[scarp][1][ii][0],scarpToes[scarp][1][ii][2],'o',color='grey')
+                        plt.show()
+                        
                     
                     # Calc toe dx #
                     dx = scarpToes[scarp][1][ii][0] - scarpToes[scarp][0][ii][0]
                     
                     # Calc toe dx using change in contour position #
                     x_pre = scarpToes[scarp][0][ii][0]
-                    # x_post = utils.transectElevIntercept(toe_pre, T_scarps[scarp][1][ii]['X'], T_scarps[scarp][1][ii]['Z'])
-                    dx_contour = np.nan#x_post-x_pre
+                    x_post = utils.transectElevIntercept(scarpToes[scarp][0][ii][2], T_scarps[scarp][1][ii]['X'], T_scarps[scarp][1][ii]['Z'])
+                    dx_contour = x_post-x_pre
                     
                     # Calc toe dz #
                     dz = scarpToes[scarp][1][ii][2] - scarpToes[scarp][0][ii][2]
+
+                    # Calc dz at pre-storm toe location #
+                    x_pre = scarpToes[scarp][0][ii][0]
+                    z_pre = scarpToes[scarp][0][ii][2]
+                    z_post = np.interp(x_pre,T_scarps[scarp][1][ii]['X'],T_scarps[scarp][1][ii]['Z'])
+                    dz_contour = z_post-z_pre
                     
                     # Calc pre-storm slope from toe to 5 m #
                     t = T_scarps[scarp][0][ii]
@@ -949,15 +965,41 @@ def examineAndPlot_VarsVsBT_AllWays():
                     m = -(t['Z'][0]-t['Z'][-1])/(t['X'][0]-t['X'][-1])
                     # inter,m = utils.linearRegression(t['X'],t['Z'])
                     slope = abs(m)
-                    # ax.plot(t['X'],t['Z'],'c')
-                    # ax.plot(t['X'],(t['X']*m)+inter,'r')
-                    # ax.set_title(str(m))
-                    # fig.show()
-                    # plt.pause(2)
-                    # plt.close('all')
+                   
                     
-                    # Calc slope ratio #
-                    slopeRatio = Bf_here/slope
+                    # Calc change in beach slope #
+                    slope_pre = Bf_here
+                    slope_post = Bf_post
+                    
+                    slopeRatio = (slope_post-slope_pre)/slope_pre
+
+                    # Calc elevation at which rertreat ends #
+                    t_pre = T_scarps[scarp][0][ii][T_scarps[scarp][0][ii]['X']<=scarpToes[scarp][0][ii][0]]
+                    t_post = T_scarps[scarp][1][ii][T_scarps[scarp][1][ii]['X']<=scarpToes[scarp][0][ii][0]]
+                    z_pre = t_pre['Z']
+                    z_post = np.interp(t_pre['X'],t_post['X'],t_post['Z'])
+                    zdif = z_post-z_pre
+                    zdif_small = zdif[t_pre['X']<scarpToes[scarp][1][ii][0]] # Take only points inshore of post-storm toe #
+                    try:
+                        iMeet = max(np.where(abs(zdif_small)<=0.05)[0])
+                    except ValueError:
+                        iMeet = np.nan
+                        heightEroded = np.nan
+                    else:
+##                        if file == files_use[2]:
+##                            fig,ax = plt.subplots(1)
+##                            ax.plot(T_scarps[scarp][0][ii]['X'],T_scarps[scarp][0][ii]['Z'],'k')
+##                            ax.plot(T_scarps[scarp][1][ii]['X'],T_scarps[scarp][1][ii]['Z'],'grey')
+##                            ax.plot(t_pre['X'][iMeet],z_pre[iMeet],'ko')
+##                            ax.plot(t_pre['X'][iMeet],z_post[iMeet],'o',color='grey')
+##                            plt.show()
+##                            plt.pause(2)
+##                            plt.close('all')
+                        zStop = np.mean([z_pre[iMeet],z_post[iMeet]])
+                        heightEroded = zStop-scarpToes[scarp][0][ii][2]
+
+           
+                    
                     
                     # Calc pre-storm beach width (toe to shoreline)
                     x_toe = scarpToes[scarp][0][ii][0]
@@ -1040,8 +1082,10 @@ def examineAndPlot_VarsVsBT_AllWays():
                                               'dx (m)':dx,
                                               'dx (m, contour)':dx_contour,
                                               'dz (m)':dz,
+                                              'dz (m, contour)':dz_contour,
                                               '$B_{Dune}$':slope,
-                                              'Bf/Bd ':slopeRatio,
+                                              '$\Delta B_f$':slopeRatio,
+                                              '$Z_{eroded}$':heightEroded,
                                               'F (m)':F,
                                               'W (m)':width,
                                               't_i (hr)':impact_dur,
@@ -1362,7 +1406,7 @@ def examineAndPlot_VarsVsBT_AllWays():
         
         
     # Vals vs BT plots #
-    varsToPlot = ['t_i (hr)']  
+    varsToPlot = ['F (m)']  
     fig,ax = plt.subplots(3,len(varsToPlot),figsize=(3,5))
     if len(varsToPlot)==1:
         ax = np.hstack([ax.reshape(-1,1),np.vstack([1,1,1])])
@@ -1650,7 +1694,7 @@ def examineAndPlot_TWLVsBT():
     
     method = 'mc'
     files = sorted([i for i in os.listdir('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/data/') if 'scarpResults' in i])
-    files_use = [i for i in files if method in i]
+    files_use = [i for i in files if method in i and 'd2' in i]
     results_byStorm = pd.DataFrame(columns=['Name','results'])
     for file in files_use:
         
@@ -1796,23 +1840,24 @@ def examineAndPlot_TWLVsBT():
         for ii in range(0,len(results_byStorm)):
             name = results_byStorm.loc[ii]['Name']
             results = results_byStorm.loc[ii]['results']
-            BT = np.nanmedian(np.array(results['BT'])[np.where(abs(results['BT'])<1)[0]])
-            BT_25 = np.nanpercentile(np.array(results['BT'])[np.where(abs(results['BT'])<1)[0]],25)
-            BT_75 = np.nanpercentile(np.array(results['BT'])[np.where(abs(results['BT'])<1)[0]],75)
-            F = np.nanmedian(np.array(results['$F_{R'+str(exc)+'%}$'])[np.where(abs(results['BT'])<1)[0]])
-            F_25 = np.nanpercentile(np.array(results['$F_{R'+str(exc)+'%}$'])[np.where(abs(results['BT'])<1)[0]],25)
-            F_75 = np.nanpercentile(np.array(results['$F_{R'+str(exc)+'%}$'])[np.where(abs(results['BT'])<1)[0]],75)
-            ti = np.nanmedian(np.array(results['$ti_{R'+str(exc)+'%}$'])[np.where(abs(results['BT'])<1)[0]])
-            ti_25 = np.nanpercentile(np.array(results['$ti_{R'+str(exc)+'%}$'])[np.where(abs(results['BT'])<1)[0]],25)
-            ti_75 = np.nanpercentile(np.array(results['$ti_{R'+str(exc)+'%}$'])[np.where(abs(results['BT'])<1)[0]],75) 
-            
-            BT_mean1.append([BT,(BT_25,BT_75)])
-            F_mean1.append([F,(F_25,F_75)])
-            ti_mean1.append([ti,(ti_25,ti_75)])
-            
-            BT_all1.append(np.array(results['BT'])[np.where(abs(results['BT'])<1)[0]])
-            F_all1.append(np.array(results['$F_{R'+str(exc)+'%}$'])[np.where(abs(results['BT'])<1)[0]])
-            ti_all1.append(np.array(results['$ti_{R'+str(exc)+'%}$'])[np.where(abs(results['BT'])<1)[0]])
+            if len(results)>0:
+                BT = np.nanmedian(np.array(results['BT'])[np.where(abs(results['BT'])<1)[0]])
+                BT_25 = np.nanpercentile(np.array(results['BT'])[np.where(abs(results['BT'])<1)[0]],25)
+                BT_75 = np.nanpercentile(np.array(results['BT'])[np.where(abs(results['BT'])<1)[0]],75)
+                F = np.nanmedian(np.array(results['$F_{R'+str(exc)+'%}$'])[np.where(abs(results['BT'])<1)[0]])
+                F_25 = np.nanpercentile(np.array(results['$F_{R'+str(exc)+'%}$'])[np.where(abs(results['BT'])<1)[0]],25)
+                F_75 = np.nanpercentile(np.array(results['$F_{R'+str(exc)+'%}$'])[np.where(abs(results['BT'])<1)[0]],75)
+                ti = np.nanmedian(np.array(results['$ti_{R'+str(exc)+'%}$'])[np.where(abs(results['BT'])<1)[0]])
+                ti_25 = np.nanpercentile(np.array(results['$ti_{R'+str(exc)+'%}$'])[np.where(abs(results['BT'])<1)[0]],25)
+                ti_75 = np.nanpercentile(np.array(results['$ti_{R'+str(exc)+'%}$'])[np.where(abs(results['BT'])<1)[0]],75) 
+                
+                BT_mean1.append([BT,(BT_25,BT_75)])
+                F_mean1.append([F,(F_25,F_75)])
+                ti_mean1.append([ti,(ti_25,ti_75)])
+                
+                BT_all1.append(np.array(results['BT'])[np.where(abs(results['BT'])<1)[0]])
+                F_all1.append(np.array(results['$F_{R'+str(exc)+'%}$'])[np.where(abs(results['BT'])<1)[0]])
+                ti_all1.append(np.array(results['$ti_{R'+str(exc)+'%}$'])[np.where(abs(results['BT'])<1)[0]])
         
         BT_mean = BT_mean1
         F_mean.append(F_mean1)
@@ -1845,6 +1890,7 @@ def examineAndPlot_TWLVsBT():
                               bounds=(-np.inf, np.inf),
                               maxfev=10000)
             yhat_all =  (pars[0]*np.power(xx[~np.isnan(xx)]+5,pars[1]))+pars[2]
+            print(pars)
 
             sst = np.sum((yy[~np.isnan(xx)]-np.mean(yy[~np.isnan(xx)]))**2)
             ssr = np.sum((yhat_all-np.mean(yy[~np.isnan(xx)]))**2)
@@ -1859,6 +1905,7 @@ def examineAndPlot_TWLVsBT():
                               bounds=(-np.inf, np.inf),
                               maxfev=10000)
             yhat_mean =  (pars[0]*np.power(xx[~np.isnan(xx)]+5,pars[1]))+pars[2]
+            print(pars)
 
             sst = np.sum((yy[~np.isnan(xx)]-np.mean(yy[~np.isnan(xx)]))**2)
             ssr = np.sum((yhat_mean-np.mean(yy[~np.isnan(xx)]))**2)
@@ -1871,19 +1918,20 @@ def examineAndPlot_TWLVsBT():
 
         ax[i,0].set_ylabel('$B_T$')
         ax[i,1].set_ylabel('$B_T$')
-    fig.legend([ii[0] for ii in hh],['2013NE','Riley','Dorian','2019NE1','2019NE2','Teddy','2021NE'],loc='center right',
+
+        fig.legend([ii[0] for ii in hh],['2013NE','Riley','Dorian','2019NE1','2019NE2','Teddy','2021NE'],loc='center right',
                frameon=False,handletextpad=0.1,fontsize=8,ncol=1,markerscale=0.5)
-    ax[2,0].set_xlabel('$F_T$ (m)')
-    ax[2,1].set_xlabel('$F_T$ (m)')
-    ax[0,0].text(-.65,.5,'R2%',fontweight='bold',fontsize=10,transform=ax[0,0].transAxes)
-    ax[1,0].text(-.65,.5,'R7%',fontweight='bold',fontsize=10,transform=ax[1,0].transAxes)
-    ax[2,0].text(-.65,.5,'R16%',fontweight='bold',fontsize=10,transform=ax[2,0].transAxes)
-    ax[0,0].text(0.01,0.9,'a',fontsize=8,fontweight='bold',transform=ax[0][0].transAxes)
-    ax[0,1].text(0.01,0.9,'b',fontsize=8,fontweight='bold',transform=ax[0][1].transAxes)
-    ax[1,0].text(0.01,0.9,'c',fontsize=8,fontweight='bold',transform=ax[1][0].transAxes)
-    ax[1,1].text(0.01,0.9,'d',fontsize=8,fontweight='bold',transform=ax[1][1].transAxes)            
-    ax[2,0].text(0.01,0.9,'e',fontsize=8,fontweight='bold',transform=ax[2][0].transAxes)
-    ax[2,1].text(0.01,0.9,'f',fontsize=8,fontweight='bold',transform=ax[2][1].transAxes)                
+        ax[2,0].set_xlabel('$F_T$ (m)')
+        ax[2,1].set_xlabel('$F_T$ (m)')
+        ax[0,0].text(-.65,.5,'R2%',fontweight='bold',fontsize=10,transform=ax[0,0].transAxes)
+        ax[1,0].text(-.65,.5,'R7%',fontweight='bold',fontsize=10,transform=ax[1,0].transAxes)
+        ax[2,0].text(-.65,.5,'R16%',fontweight='bold',fontsize=10,transform=ax[2,0].transAxes)
+        ax[0,0].text(0.01,0.9,'a',fontsize=8,fontweight='bold',transform=ax[0][0].transAxes)
+        ax[0,1].text(0.01,0.9,'b',fontsize=8,fontweight='bold',transform=ax[0][1].transAxes)
+        ax[1,0].text(0.01,0.9,'c',fontsize=8,fontweight='bold',transform=ax[1][0].transAxes)
+        ax[1,1].text(0.01,0.9,'d',fontsize=8,fontweight='bold',transform=ax[1][1].transAxes)            
+        ax[2,0].text(0.01,0.9,'e',fontsize=8,fontweight='bold',transform=ax[2][0].transAxes)
+        ax[2,1].text(0.01,0.9,'f',fontsize=8,fontweight='bold',transform=ax[2][1].transAxes)                
     
     
     
@@ -1913,15 +1961,15 @@ def examineAndPlot_TWLVsBT():
     def power_law(x, a, b, c):
         return (a*np.power(x,b))+c
     pars, cov = curve_fit(f=power_law, 
-                      xdata=F_all[~np.isnan(F_all)]+5, 
-                      ydata=BT_all[~np.isnan(F_all)],
+                      xdata=F_all[~np.isnan(list(F_all))]+5, 
+                      ydata=BT_all[~np.isnan(list(F_all))],
                       p0=[0,-5,0], 
                       bounds=(-np.inf, np.inf),
                       maxfev=10000)
-    yhat_power =  (pars[0]*np.power(F_all[~np.isnan(F_all)]+5,pars[1]))+pars[2]
+    yhat_power =  (pars[0]*np.power(F_all[~np.isnan(list(F_all))]+5,pars[1]))+pars[2]
 
-    sst = np.sum((BT_all[~np.isnan(F_all)]-np.mean(BT_all[~np.isnan(F_all)]))**2)
-    ssr = np.sum((yhat_power-np.mean(BT_all[~np.isnan(F_all)]))**2)
+    sst = np.sum((BT_all[~np.isnan(list(F_all))]-np.mean(BT_all[~np.isnan(list(F_all))]))**2)
+    ssr = np.sum((yhat_power-np.mean(BT_all[~np.isnan(list(F_all))]))**2)
     r2_all_power = ssr/sst
     print(r2_all_power)
     
@@ -1931,11 +1979,11 @@ def examineAndPlot_TWLVsBT():
     ax.plot(F_SP,BT_SP,'mo',markersize=4,label='Splinter & Palmsten (2012)')
     ax.plot(F_BL,BT_BL,'co',markersize=4,label='Bonte & Levoy (2015)')
     ax.plot(F_OL,BT_OL,'yo',markersize=4,label='Overbeck et al. (2017)')
-    ax.plot(F_all[~np.isnan(F_all)][np.argsort(F_all[~np.isnan(F_all)])],yhat_power[np.argsort(F_all[~np.isnan(F_all)])],'r',linewidth=2,label='$y = '+str(round(pars[0],2))+'x^{'+str(round(pars[1],2))+'}+ '+str(round(pars[2],2))+'$')
+    ax.plot(F_all[~np.isnan(list(F_all))][np.argsort(F_all[~np.isnan(list(F_all))])],yhat_power[np.argsort(F_all[~np.isnan(list(F_all))])],'r',linewidth=2,label='$y = '+str(round(pars[0],2))+'x^{'+str(round(pars[1],2))+'}+ '+str(round(pars[2],2))+'$')
     ax.legend(fontsize=8,loc='lower right',borderpad=0.1,handletextpad=0.1)
     ax.set_xlabel('$F_T$ (m)')
     ax.set_ylabel('$B_T$')
-    
+    plt.show()
     
     
     
@@ -1986,7 +2034,7 @@ def plotDuneChangeSummary():
     
     method = 'mc'
     files = sorted([i for i in os.listdir('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/data/') if 'scarpResults' in i])
-    files_use = [i for i in files if method in i]
+    files_use = [i for i in files if method in i and 'd2' in i]
     results_byStorm = pd.DataFrame(columns=['Name','results'])
     for file in files_use:
         
@@ -2033,24 +2081,26 @@ def plotDuneChangeSummary():
                                               '$\Delta V_D$ ($m^3/m$)':vol_dune},
                                              ignore_index=True)      
                 
+        if len(results)>0:
         
-        
-        if bdate==20130306:
-            name = '2013NE'
-        elif bdate==20180303:
-            name = 'Riley'
-        elif bdate==20190904:
-            name = 'Dorian'
-        elif bdate==20191011:
-            name = '2019NE1'
-        elif bdate==20191114:
-            name = '2019NE2'
-        elif bdate==20200910:
-            name = 'Teddy'
-        elif bdate==20210318:
-            name = '2021NE'
+            if bdate==20130306:
+                name = '2013NE'
+            elif bdate==20180303:
+                name = 'Riley'
+            elif bdate==20190904:
+                name = 'Dorian'
+            elif bdate==20191011:
+                name = '2019NE1'
+            elif bdate==20191114:
+                name = '2019NE2'
+            elif bdate==20200910:
+                name = 'Teddy'
+            elif bdate==20210318:
+                name = '2021NE'
+            else:
+                name = 'WHAT?'
             
-        results_byStorm = results_byStorm.append({'Name':name,'results':results},ignore_index=True)    
+            results_byStorm = results_byStorm.append({'Name':name,'results':results},ignore_index=True)    
     
   
     
@@ -2061,13 +2111,13 @@ def plotDuneChangeSummary():
     # Plot the storms with labels #
     fig = plt.figure(figsize=(3.25,6))
     plt.rcParams.update({'font.size': 8})
-    ax1 = plt.axes([0.15,0.08,0.72,0.25])#plt.axes([0.1,0.08,0.72,0.25])
+    ax1 = plt.axes([0.1,0.08,0.72,0.25])#plt.axes([0.15,0.08,0.72,0.25])
     ax1.set_xlim(0,4000)
     ax1.set_ylim(datetime.datetime(2013,1,1),datetime.datetime(2014,12,31))
     ax1.spines['top'].set_visible(False)
     ax1.set_yticks([datetime.datetime(2013,1,1),datetime.datetime(2014,1,1)])
     ax1.yaxis.set_major_formatter(myFmt)
-    ax2 = plt.axes([0.15,0.33,0.72,0.62])#plt.axes([0.1,0.33,0.72,0.62])
+    ax2 = plt.axes([0.1,0.33,0.72,0.62])#plt.axes([0.15,0.33,0.72,0.62])
     ax2.set_xlim(0,4000)
     ax2.set_ylim(datetime.datetime(2017,1,1),datetime.datetime(2021,12,13)) 
     ax2.spines['bottom'].set_visible(False)
@@ -2094,16 +2144,16 @@ def plotDuneChangeSummary():
                         datetime.datetime(2020,9,17,12),datetime.datetime(2021,3,20,12)]
         for i in range(0,len(dates_storms)):
             ax.plot((min(xx),max(xx)),(dates_storms[i],dates_storms[i]),'k--',linewidth=0.5)
-##            
-##    ax1.text(4025,dates_storms[0],'NorEaster',va='center',ha='left',fontweight='bold',fontsize=8)
-##    ax2.text(4025,dates_storms[1],'Maria',va='center',fontsize=8)
-##    ax2.text(4025,dates_storms[2],'Riley',va='center',ha='left',fontweight='bold',fontsize=8)
-##    ax2.text(4025,dates_storms[3]-datetime.timedelta(days=50),'Dorian',va='center',ha='left',fontweight='bold',fontsize=8)
-##    ax2.text(4025,dates_storms[4]-datetime.timedelta(days=20),'Humberto',va='center',ha='left',fontsize=8)
-##    ax2.text(4025,dates_storms[5]+datetime.timedelta(days=5),'NorEaster',va='center',ha='left',fontweight='bold',fontsize=8)
-##    ax2.text(4025,dates_storms[6]+datetime.timedelta(days=15),'NorEaster',va='center',ha='left',fontweight='bold',fontsize=8)
-##    ax2.text(4025,dates_storms[7],'Teddy',va='center',ha='left',fontweight='bold',fontsize=8)
-##    ax2.text(4025,dates_storms[8],'NorEaster',va='center',ha='left',fontweight='bold',fontsize=8)
+            
+    ax1.text(4025,dates_storms[0],'NorEaster',va='center',ha='left',fontweight='bold',fontsize=8)
+    ax2.text(4025,dates_storms[1],'Maria',va='center',fontsize=8)
+    ax2.text(4025,dates_storms[2],'Riley',va='center',ha='left',fontweight='bold',fontsize=8)
+    ax2.text(4025,dates_storms[3]-datetime.timedelta(days=50),'Dorian',va='center',ha='left',fontweight='bold',fontsize=8)
+    ax2.text(4025,dates_storms[4]-datetime.timedelta(days=20),'Humberto',va='center',ha='left',fontsize=8)
+    ax2.text(4025,dates_storms[5]+datetime.timedelta(days=5),'NorEaster',va='center',ha='left',fontweight='bold',fontsize=8)
+    ax2.text(4025,dates_storms[6]+datetime.timedelta(days=15),'NorEaster',va='center',ha='left',fontweight='bold',fontsize=8)
+    ax2.text(4025,dates_storms[7],'Teddy',va='center',ha='left',fontweight='bold',fontsize=8)
+    ax2.text(4025,dates_storms[8],'NorEaster',va='center',ha='left',fontweight='bold',fontsize=8)
     ax1.set_xlabel('Alongshore (m)')
         
     dates_storms_use = [datetime.datetime(2013,3,13),
@@ -2122,17 +2172,17 @@ def plotDuneChangeSummary():
             date_plot = date_plot+datetime.timedelta(days=40)
             
         locs = np.array(results_byStorm.loc[i]['results']['Y'])
-        vals = np.array(results_byStorm.loc[i]['results']['$\Delta V_D$ ($m^3/m$)'])
+        vals = np.array(results_byStorm.loc[i]['results']['BT'])
         times = np.tile(date_plot,len(locs))
             
         for ax in [ax1,ax2]:
-            a = ax.scatter(locs,times,200,vals,marker='|',cmap='copper',vmin=-15,vmax=0,alpha=1)
+            a = ax.scatter(locs,times,200,vals,marker='|',cmap=ryb,vmin=-0.2,vmax=0.2,alpha=1)
 
 
     cbax = plt.axes([0.33,0.3,0.3,0.01])#plt.axes([0.33,0.3,0.3,0.01])
     cbax.set_xticks([])
     cbax.set_yticks([])
-    plt.colorbar(a,cbax,orientation='horizontal',label='$\Delta V_D$ ($m^3/m$)',ticks=[-15,-10,-5,0])   
+    plt.colorbar(a,cbax,orientation='horizontal',label='BT',ticks=[-0.2,0,0.2])   
     
     ax2.text(0.02,0.97,'a',transform=ax2.transAxes,fontweight='bold')
 ##    ax2.set_yticklabels([])
