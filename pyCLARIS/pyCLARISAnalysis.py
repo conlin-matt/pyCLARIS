@@ -1188,7 +1188,7 @@ class scarpManager():
                             xx1 = xx#[np.logical_and(zz>=1,zz<=5)]
                             zz1 = zz#[np.logical_and(zz>=1,zz<=5)]
                             zz_smooth = zz1#smooth(zz1)
-                            iSub = np.logical_and(zz_smooth>=1.5,zz_smooth<=5)
+                            iSub = np.logical_and(zz_smooth>=2,zz_smooth<=5)
                             dx = np.gradient(xx1, xx1)  # first derivatives
                             dy = np.gradient(zz_smooth, xx1)                
                             d2x = np.gradient(dx, xx1)  # second derivatives
@@ -1333,17 +1333,17 @@ class scarpManager():
                         iBad_t.append(ii)
      
 
-##                for iii in sorted(iBad_t, reverse=True):
-##                    T_scarps[i][0] = np.delete(T_scarps[i][0],iii)
-##                    T_scarps[i][1] = np.delete(T_scarps[i][1],iii)
-##                    toes[i][0] = np.delete(toes[i][0],iii,axis=0)
-##                    toes[i][1] = np.delete(toes[i][1],iii,axis=0)
-##                    
+                for iii in sorted(iBad_t, reverse=True):
+                    T_scarps[i][0] = np.delete(T_scarps[i][0],iii)
+                    T_scarps[i][1] = np.delete(T_scarps[i][1],iii)
+                    toes[i][0] = np.delete(toes[i][0],iii,axis=0)
+                    toes[i][1] = np.delete(toes[i][1],iii,axis=0)
+                    
             
                 
                     
-                prop = len(iBad_t)/len(T_scarps[i][0])#len(toes[i][0])
-                if prop>0.5: #<5:   
+                prop = len(toes[i][0])#len(iBad_t)/len(T_scarps[i][0])
+                if prop<5:#>0.5:    
                     iBad.append(i)
                 else:
                     pass
@@ -1367,15 +1367,21 @@ class scarpManager():
                 Bf = []
                 for t in range(0,len(T_scarps[ii][0])):
                     if method=='lr':
-                        x_beta = T_scarps[ii][0][t]['X'][T_scarps[ii][0][t]['X']>=toes[ii][0][t,0]]
-                        z_beta = T_scarps[ii][0][t]['Z'][T_scarps[ii][0][t]['X']>=toes[ii][0][t,0]]
-                        b,yhat,r2,p_values = utils.linearRegression(x_beta[~np.isnan(z_beta)],z_beta[~np.isnan(z_beta)])
-                        icept=b[0]
-                        m=b[1]
+##                        x_beta = T_scarps[ii][0][t]['X'][T_scarps[ii][0][t]['X']>=toes[ii][0][t,0]]
+##                        z_beta = T_scarps[ii][0][t]['Z'][T_scarps[ii][0][t]['X']>=toes[ii][0][t,0]]
+                        x_beta = T_scarps[ii][0][t]['X'][np.logical_and(T_scarps[ii][0][t]['X']>=toes[ii][0][t,0],T_scarps[ii][0][t]['Z']>=0.36)]
+                        z_beta = T_scarps[ii][0][t]['Z'][np.logical_and(T_scarps[ii][0][t]['X']>=toes[ii][0][t,0],T_scarps[ii][0][t]['Z']>=0.36)]
+                        try:
+                            b,yhat,r2,p_values = utils.linearRegression(x_beta[~np.isnan(z_beta)],z_beta[~np.isnan(z_beta)])
+                            m=b[1]
+                        except:
+                            m = np.nan
                         Bf.append(-m)
                     elif method=='ep':
-                        x_beta = T_scarps[ii][0][t]['X'][T_scarps[ii][0][t]['X']>=toes[ii][0][t,0]]
-                        z_beta = T_scarps[ii][0][t]['Z'][T_scarps[ii][0][t]['X']>=toes[ii][0][t,0]]
+##                        x_beta = T_scarps[ii][0][t]['X'][T_scarps[ii][0][t]['X']>=toes[ii][0][t,0]]
+##                        z_beta = T_scarps[ii][0][t]['Z'][T_scarps[ii][0][t]['X']>=toes[ii][0][t,0]]                        
+                        x_beta = T_scarps[ii][0][t]['X'][np.logical_and(T_scarps[ii][0][t]['X']>=toes[ii][0][t,0],T_scarps[ii][0][t]['Z']>=0.36)]
+                        z_beta = T_scarps[ii][0][t]['Z'][np.logical_and(T_scarps[ii][0][t]['X']>=toes[ii][0][t,0],T_scarps[ii][0][t]['Z']>=0.36)]
                         try:
                             m = abs((z_beta[-1]-z_beta[0])/(x_beta[-1]-x_beta[0]))
                         except:

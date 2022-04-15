@@ -3,10 +3,11 @@ import math
 
 # Third-party imports #
 import calendar
+import csv
 import datetime
 import numpy as np
 import pandas as pd
-from scipy import optimize
+from scipy import optimize,stats
 from scipy.interpolate import interp1d
 
 
@@ -88,9 +89,17 @@ class NDBCWaveRecord():
         atTime(): Get the value of a specified parameter at a certain time.
     '''
     
-    def __init__(self,station,years):
+    def __init__(self,station,bdate,edate):
         self.station = station
-        self.years = years
+        self.bdate=bdate
+        self.edate=edate
+        
+        nyr = int(str(self.edate)[0:4])-int(str(self.bdate)[0:4])+1
+        if nyr==1:
+            self.years = int(str(self.edate)[0:4])
+        else:
+            self.years = list(np.arange(int(str(self.bdate)[0:4]),int(str(self.edate)[0:4])+1))
+            
         
     def get(self):
         '''
@@ -103,20 +112,20 @@ class NDBCWaveRecord():
         allDat = None  
         for yr in self.years:
             
-            if yr != datetime.datetime.now().year:
+            if yr != 2021:#datetime.datetime.now().year:
                 url = 'https://www.ndbc.noaa.gov/view_text_file.php?filename='+str(self.station)+'h'+str(yr)+'.txt.gz&dir=data/historical/stdmet/'
-                dat = pd.read_csv(url,sep=' ',delimiter=' ',header=2,index_col=False,usecols=[0,1,2,3,4,9,11,13,15],
-                                  names=['yr','mo','day','hr','mm','wvht (m)','DPD (sec)','APD (sec)','MWD (degT)'])
+                dat = pd.read_csv(url,sep=' ',delimiter=' ',header=2,index_col=False,usecols=[0,1,2,3,4,5,7,9,11,13,15],
+                                  names=['yr','mo','day','hr','mm','wdir (degT)','wspeed (m/s)','wvht (m)','DPD (sec)','APD (sec)','MWD (degT)'])
             else:
-                for i in range(1,datetime.datetime.now().month):
+                for i in range(1,12):#datetime.datetime.now().month):
                     try:
                         datetime_object = datetime.datetime.strptime(str(i), "%m")
                         month_name = datetime_object.strftime("%b")
                         
                         url = 'https://www.ndbc.noaa.gov/view_text_file.php?filename='+str(self.station)+str(i)+str(yr)+'.txt.gz&dir=data/stdmet/'+month_name+'/'
                
-                        dat1 = pd.read_csv(url,sep=' ',delimiter=' ',header=1,index_col=False,usecols=[0,1,2,3,4,8,9,10,11],skipinitialspace=True,
-                                           names=['yr','mo','day','hr','mm','wvht (m)','DPD (sec)','APD (sec)','MWD (degT)'])
+                        dat1 = pd.read_csv(url,sep=' ',delimiter=' ',header=1,index_col=False,usecols=[0,1,2,3,4,5,6,8,9,10,11],skipinitialspace=True,
+                                           names=['yr','mo','day','hr','mm','wdir (degT)','wspeed (m/s)','wvht (m)','DPD (sec)','APD (sec)','MWD (degT)'])
                         if i == 1:
                             dat = dat1
                         else:
@@ -131,7 +140,24 @@ class NDBCWaveRecord():
                 allDat = dat
          
         allDat.set_index(np.arange(0,len(allDat)),inplace=True)
-        allDat = allDat[allDat['wvht (m)']<90]
+        # allDat = allDat[allDat['wvht (m)']<90]
+        
+        # Truncate the dataframe to the bdate and edate #
+        waves_d = []
+        for i in range(0,len(allDat)):
+            yr = str(allDat['yr'][i])
+            mo = str(allDat['mo'][i])
+            if len(mo)==1:
+                mo = '0'+mo
+            day = str(allDat['day'][i])
+            if len(day)==1:
+                day = '0'+day
+            ds = yr+mo+day
+            waves_d.append(int(ds))
+        allDat = allDat.loc[np.logical_and(waves_d>=np.int64(self.bdate),waves_d<=np.int64(self.edate))]
+        allDat = allDat.reset_index()
+        allDat = allDat.drop('index',axis=1)
+        
         return allDat
         
     def atTime(self,dat,date,param):
@@ -182,32 +208,146 @@ class NDBCWaveRecord():
         
         return pi
     
+ 
+class FRFWaveRecord():
     
+    def __init__(self,file,bdate,edate):
+        self.bdate = bdate
+        self.edate = edate
+        self.file = file
+        
+    def get(self):
+        '''
+        Returns a dataframe containing the data.
+        '''
+        
+        data = pd.read_excel(self.file,engine='openpyxl')
+        data = data.rename(columns={'Year':'yr',
+                              'Month':'mo',
+                              'Day':'day',
+                              'Hour':'hr',
+                              'Min':'mm',
+                              'Sec':'sec',
+                              'SigWaveHeight_m':'wvht (m)',
+                              'PeakWavePeriod_s':'Tp (s)',
+                              'MeanWaveDirection_deg':'MWD (degT)'})
 
-                      
+        
+        # data = pd.read_csv(self.file)
+        
+        # rows = []
+        # csv_header = ['Year','Mo','Da','Time','Gauge','dir','HmO','Period']
+        # frame_header = ['yr','mo','day','hrmm','Gauge','MWD (degT)','wvht (m)','DPD (sec)']
+        
+        # with open(self.file, 'rt') as f_input:
+        #     for row in csv.DictReader(f_input, delimiter=' ', fieldnames=csv_header[:-1], restkey=csv_header[-1], skipinitialspace=True):
+        #         try:
+        #             rows.append([row['Year'],row['Mo'],row['Da'],row['Time'],row['Gauge'],row['dir'],row['HmO'],row['Period']])
+        #         except KeyError:
+        #             rows.append([row['Year'],row['Mo'],row['Da'],row['Time'],row['Gauge'],row['dir'],row['HmO'],row['Period']])
+        
+        # data = pd.DataFrame(rows, columns=frame_header)
+        # data = data.iloc[5:-1]
+        # data = data.reset_index()
+        # data = data.drop(columns='index')
+        # # Fix period column #
+        # period_fill = [i[0] for i in data['DPD (sec)']]
+        # data['DPD (sec)'] = period_fill
+        # # Create separate hour and minute columns #
+        # hr= [int(str(i)[0:2]) for i in data['hrmm']]
+        # mm= [int(str(i)[2:4]) for i in data['hrmm']]
+        # data = data.drop(columns='hrmm')
+        # data.insert(3,'hr',hr)
+        # data.insert(4,'mm',mm)
+        
+        # Truncate the dataframe to the bdate and edate #
+        waves_d = []
+        for i in range(0,len(data)):
+            yr = str(data['yr'][i])
+            mo = str(data['mo'][i])
+            if len(mo)==1:
+                mo = '0'+mo
+            day = str(data['day'][i])
+            if len(day)==1:
+                day = '0'+day
+            ds = yr+mo+day
+            waves_d.append(int(ds))
+        data = data.loc[np.logical_and(waves_d>=np.int64(self.bdate),waves_d<=np.int64(self.edate))]
+        data = data.reset_index()
+        data = data.drop('index',axis=1)
+        
+        return data
+    
+    def atTime(self,dat,date,param):
+        
+        if param==1:
+            p = 'wvht (m)'
+        elif param==2:
+            p = 'Tp (s)'
+        elif param==3:
+            p = 'MWD (degT)'
+
+        dtimes = []
+        for i in range(0,len(dat)):
+            if dat['mo'][i]<10:
+                dummo = '0'
+            else:
+                dummo = ''
+            if dat['day'][i]<10:
+                dumday = '0'
+            else:
+                dumday = ''
+            if dat['hr'][i]<10:
+                dumhr = '0'
+            else:
+                dumhr = ''
+            if dat['mm'][i]<10:
+                dummm = '0'
+            else:dummm = ''
+            
+            dtimes.append(str(dat['yr'][i])+dummo+str(dat['mo'][i])+dumday+str(dat['day'][i])+dumhr+str(dat['hr'][i])+dummm+str(dat['mm'][i]))
+            
+        d = pd.to_datetime(dtimes)
+        # Turn the date times into numeric values (seconds since the first observation)
+        time_int = []
+        for i in d:
+            td = i-d[0]
+            time_int.append(td.total_seconds())
+            
+        # Get the numeric value for the desired date #
+        td = pd.to_datetime(date)-d[0]
+        timeWant = td.total_seconds()
+        
+        # Interpolate wl at that time #
+        f = interp1d(time_int,dat[p])
+        pi = float(f(timeWant))
+        
+        return pi
+                     
+
 
 class hydroLab():
-    def __init__(self,bdate,edate,station_wl=None,station_waves=None):
+    def __init__(self,bdate,edate,station_wl=None,station_waves=None,buoyDepth=None):
 
         if not station_wl and not station_waves:
             raise ValueError('Please provide a water level station ID, wave buoy number, or both')
+
+        self.buoyDepth=buoyDepth
 
         if station_wl:
             wlObj = NOAAWaterLevelRecord(station_wl,bdate,edate)
             self.wl = wlObj.get()
             
         if station_waves:
-            bdate_yr = int(str(bdate)[0:4])
-            edate_yr = int(str(edate)[0:4])
-            if int(edate_yr)-int(bdate_yr)==0:
-                years = bdate_yr
-            else:
-                years = [i for i in np.arange(bdate_yr,edate_yr+1)]
-            waveObj = NDBCWaveRecord(station_waves,years)
-            self.waves = waveObj.get()
+            if type(station_waves) is int: #NDBC#
+                waveObj = NDBCWaveRecord(station_waves,bdate,edate)
+                self.waves = waveObj.get()
+            elif type(station_waves) is str: #FRF file#
+                waveObj = FRFWaveRecord(station_waves,bdate,edate)
+                self.waves = waveObj.get()
             
 
-    def calcTWL(self,beta):
+    def calcTWL(self,beta,exceedance=2):
 
         wl = self.wl
         waves = self.waves
@@ -224,12 +364,59 @@ class hydroLab():
         wli = np.interp(tsWave,tsWL,list(wl['wl_obs']))
 
         # Calculate R2% #
-        H = waves['wvht (m)']
-        T = waves['DPD (sec)']
-        L = (9.81*np.square(T))/(2*math.pi) # APPROXIMATION #
-
-        setup = 0.35*beta*np.sqrt(H*L)
-        swash = np.sqrt(H*L*((0.563*(beta**2))+0.004))/2
+        H = waves['wvht (m)'].astype(float)
+        T = waves['Tp (s)'].astype(float)
+        L = []
+        for t in T:
+            k = newtRaph(t,self.buoyDepth)
+            L.append((2*math.pi)/k)
+        L = pd.Series(L)
+        
+        if exceedance==2:
+            n_sigma=2
+        elif exceedance==7:
+            n_sigma=1.5
+        elif exceedance==16:
+            n_sigma=1
+        elif exceedance==23:
+            n_sigma=0.75
+        elif exceedance==30:
+            n_sigma=0.5
+        elif exceedance==50:
+            n_sigma=0
+            
+        setup = 0.35*math.tan(beta)*np.sqrt(H*L)
+        swash = (np.sqrt(H*L*((0.563*(beta**2))+0.004))/2)*(n_sigma/2)
+        
+        # R2_manual = 1.1*(setup+swash)
+        
+        # from py_wave_runup import models
+        # beta = np.tile(beta,len(L))
+        # for i in range(0,len(L)):
+        #     model_sto06 = models.Stockdon2006(Hs=H[i], Lp=L[i], beta=beta[i])   
+        #     R2_stockdon = model_sto06.R2
+        #     pow18 = models.Power2018(Hs=H[i], Lp=L[i], beta=beta[i], r=0.00075)
+        #     R2_power = pow18.R2
+        #     hol86 = models.Holman1986(Hs=H[i], Lp=L[i], beta=beta[i])
+        #     R2_holman = hol86.R2
+        #     niel09 = models.Nielsen2009(Hs=H[i], Lp=L[i], beta=beta[i])
+        #     R2_nielson = niel09.R2
+        #     rug01 = models.Ruggiero2001(Hs=H[i], Lp=L[i], beta=beta[i])
+        #     R2_prugg = rug01.R2
+        #     vou12 = models.Vousdoukas2012(Hs=H[i], Lp=L[i], beta=beta[i])
+        #     R2_vous = vou12.R2
+        #     atk17 = models.Atkinson2017(Hs=H[i], Lp=L[i], beta=beta[i])
+        #     R2_atk = atk17.R2
+        #     sen11 = models.Senechal2011(Hs=H[i], Lp=L[i], beta=beta[i])
+        #     R2_sen = sen11.R2
+            
+        # fig,ax = plt.subplots(1)
+        # ax.bar(['Stockdon','Power','Holman','Nielson','Prugg','Vousdoukas','Atkinson','Senechal'],
+        #         [R2_stockdon,R2_power,R2_holman,R2_nielson,R2_prugg,R2_vous,R2_atk,R2_sen])
+        # ax.set_title('Hs='+str(round(H[i],2))+',Lp='+str(round(L[i],2))+',Tp='+str(round(T[i],2))+',beta='+str(beta[i]))
+        # ax.set_ylabel('R2%')
+            
+       
         TWL_mag = wli+(1.1*(setup+swash))
 
         TWL = np.transpose(np.vstack([tWave,list(TWL_mag)]))
@@ -255,21 +442,24 @@ def newtRaph(T,h):
     the Newton-Raphsun method.
     '''
     
-    L_not = (9.81*(T**2))/(2*math.pi)
-    k1 = (2*math.pi)/L_not
-
-    def fk(k):
-        return (((2*math.pi)/T)**2)-(9.81*k*math.tanh(k*h))
-    def f_prime_k(k):
-        return (-9.81*math.tanh(k*h))-(9.81*k*(1-(math.tanh(k*h)**2)))
-
-    k2 = 100
-    i = 0
-    while abs((k2-k1))/k1 > 0.01:
-          i+=1
-          if i!=1:
-              k1=k2
-          k2 = k1-(fk(k1)/f_prime_k(k1))
+    if not np.isnan(T):
+        L_not = (9.81*(T**2))/(2*math.pi)
+        k1 = (2*math.pi)/L_not
+    
+        def fk(k):
+            return (((2*math.pi)/T)**2)-(9.81*k*math.tanh(k*h))
+        def f_prime_k(k):
+            return (-9.81*math.tanh(k*h))-(9.81*k*(1-(math.tanh(k*h)**2)))
+    
+        k2 = 100
+        i = 0
+        while abs((k2-k1))/k1 > 0.01:
+              i+=1
+              if i!=1:
+                  k1=k2
+              k2 = k1-(fk(k1)/f_prime_k(k1))
+    else:
+        k2 = np.nan
 
     return k2
 
@@ -295,14 +485,48 @@ def linearRegression(x,y):
     x = np.array(x)
     y = np.array(y)
     
+    # Perform the regression #
     n = np.size(x)
     m_x,m_y = np.mean(x),np.mean(y)
     SS_xy = np.sum(y*x) - n*m_y*m_x
     SS_xx = np.sum(x*x) - n*m_x*m_x
     b_1 = SS_xy/SS_xx
     b_0 = m_y-b_1*m_x
+    
+    # Calculate R2 #
+    m = b_1
+    b = b_0
+    
+    yhat = (x*m)+b
+    sst = np.sum((y-np.mean(y))**2)
+    ssr = np.sum((yhat-np.mean(y))**2)
+    r2 = ssr/sst
+    
+    # Calculate p-values. Method taken from top answer to this SO question https://stackoverflow.com/questions/27928275/find-p-value-significance-in-scikit-learn-linearregression #
+    params = np.append(b,m)
+    predictions = yhat
+    
+    newX = np.append(np.ones((len(x),1)), x.reshape(-1,1), axis=1)
+    MSE = (sum((y-predictions)**2))/(len(newX)-len(newX[0]))
+    
+    
+    var_b = MSE*(np.linalg.inv(np.dot(newX.T,newX)).diagonal())
+    sd_b = np.sqrt(var_b)
+    ts_b = params/ sd_b
+    
+    p_values =[2*(1-stats.t.cdf(np.abs(i),(len(newX)-len(newX[0])))) for i in ts_b]    
 
-    return b_0,b_1
+    return (b_0,b_1),yhat,r2,p_values
+
+
+def transectElevIntercept(elev,x,z):
+
+    xx = x[~np.isnan(z)]
+    zz = z[~np.isnan(z)]
+    elev = np.zeros(len(xx))+elev
+    idx = np.argwhere(np.diff(np.sign(elev - zz))).flatten()
+    x_intercept = xx[idx]
+    return x_intercept[0]
 
 
 def FRF2LL(xFRF,yFRF):
