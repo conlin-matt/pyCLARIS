@@ -29,7 +29,7 @@ for date in [ ['20210318','20210323'],['20200910','20200925'],['20191114','20191
     direcs = ['/Users/frfuser/Documents/pyCLARIS_project/data/'+i for i in sorted(os.listdir('/Users/frfuser/Documents/pyCLARIS_project/data')) if date_pre in i or date_post in i]
     thresh_vertChangeU = 0.5
     scarpToeMethod = 'mc_supervised'
-    slopeMethod = 'ep'
+    slopeMethod = 'lr'
     DEMGridSize = '0.5' # 0.5 or 1 #
     
     if scarpToeMethod == 'manual_pc':

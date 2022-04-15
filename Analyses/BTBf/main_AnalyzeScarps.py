@@ -497,7 +497,7 @@ def plotProfilesThroughTime():
                   'pre Teddy','post Teddy',
                   'pre 2021NE','post 2021NE']
     names = names[0:len(names):2]+names[1:len(names):2]  
-    fig.legend(hh,names,ncol=2,loc='upper center',columnspacing=0.5,handletextpad=0.3)
+    fig.legend(hh,names,ncol=2,loc='upper center',columnspacing=0.5,handletextpad=0.3,fontsize=8)
     ax1.set_xlabel('Cross-shore (m)')
     ax2.set_xlabel('Cross-shore (m)')
     ax1.set_ylabel('Elev (m, NAVD88)')
@@ -526,8 +526,8 @@ def plotDoDs():
         xx = np.arange(-200,150,0.5)
         yy = np.arange(0,4000,0.5)
         h = ax[-i-1].pcolor(yy,xx,np.transpose(dsms[1]-dsms[0]),vmin=-1,vmax=1,cmap='seismic_r')
-        ax[-i-1].contour(yy,xx,np.transpose(dsms[0]),[0.36],colors=['k'])
-        ax[-i-1].contour(yy,xx,np.transpose(dsms[0]),[4],colors=['k'])
+        ax[-i-1].contour(yy,xx,np.transpose(dsms[0]),[0.36],colors=['k'],linewidth=0.1)
+        ax[-i-1].contour(yy,xx,np.transpose(dsms[0]),[4],colors=['k'],linewidth=0.1)
         ax[-i-1].set_ylim(-80,120)
         ax[-i-1].set_yticks([60,110])
         ax[-i-1].invert_yaxis()
@@ -554,7 +554,38 @@ def plotDoDs():
             
         cb = plt.colorbar(h,cbax,orientation='horizontal')
         cb.ax.set_title('$\Delta Z $(m)',fontsize=10)
-    plt.savefig('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/figs/DoDs.png',dpi=400)
+
+        # Calculate average elevation changes at z=2 m and z=4 m
+        cs2 = plt.contour(yy,xx,np.transpose(dsms[0]),[2],colors=['k'],linewidth=0.1)
+        xy2 =cs2.allsegs[0][0]
+        difs = []
+        for ii in xy2[0:-1:5]:
+            d = np.sqrt((np.meshgrid(xx,yy)[0].flatten()-ii[1])**2+(np.meshgrid(xx,yy)[1].flatten()-ii[0])**2)
+            d = d[~np.isnan(dsms[0].flatten())]
+            iMin = np.where(d==min(d))[0][0]
+            z2_pre = float(dsms[0].flatten()[~np.isnan(dsms[0].flatten())][iMin])
+            z2_post = float(dsms[1].flatten()[~np.isnan(dsms[0].flatten())][iMin])
+            difs.append(round(z2_post-z2_pre,2))
+        difsMean2 = np.nanmedian(difs)
+        difsStd2 = np.nanstd(difs)
+
+        cs4 = plt.contour(yy,xx,np.transpose(dsms[0]),[4],colors=['k'],linewidth=0.1)
+        xy4 =cs4.allsegs[0][0]
+        difs = []
+        for ii in xy4[0:-1:5]:
+            d = np.sqrt((np.meshgrid(xx,yy)[0].flatten()-ii[1])**2+(np.meshgrid(xx,yy)[1].flatten()-ii[0])**2)
+            d = d[~np.isnan(dsms[0].flatten())]
+            iMin = np.where(d==min(d))[0][0]
+            z4_pre = float(dsms[0].flatten()[~np.isnan(dsms[0].flatten())][iMin])
+            z4_post = float(dsms[1].flatten()[~np.isnan(dsms[0].flatten())][iMin])
+            difs.append(round(z4_post-z4_pre,2))
+        difsMean4 = np.nanmedian(difs)
+        difsStd4 = np.nanstd(difs)
+
+        print(str(difsMean2)+'p/m '+str(difsStd2),str(difsMean4)+'p/m '+str(difsStd4))
+        
+    
+    plt.savefig('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/figs/Submission1/DoDs.png',dpi=400)
     plt.show()
             
         
@@ -828,12 +859,12 @@ def examineAndPlot_VarsVsBT_AllWays():
         
     method = 'mc'
     files = sorted([i for i in os.listdir('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/data/') if 'scarpResults' in i])
-    files_use = [i for i in files if method in i]
+    files_use = [i for i in files if method in i and 'd2' in i]
     results_byStorm = pd.DataFrame(columns=['Name','results'])
     for file in files_use:
         
-        results = pd.DataFrame(columns=['BT','Bf','$Z_{Toe}$ (m)','Post-storm toe elev (m)','$Bf_{post}$','dx (m)','dx (m, contour)',
-                                'dz (m)','dz (m, contour)','$\B_{Dune}$','$\Delta B_f$','$Z_{eroded}$',
+        results = pd.DataFrame(columns=['BT','Bf','$Z_{Toe}$ (m)','Post-storm toe elev (m)','$Bf_{post}$','dx (m)','countour dx (m)',
+                                'dz (m)','dz (m, contour)','$\B_{Dune}$','$\Delta B_f (\%)$','$Z_{eroded}$ (m)',
                                 'F (m)','W (m)','t_i (hr)','$max(H_s)$ (m)','\sumE (MJh/m^2)','TWL_ref (m)'
                                 '$\Delta V_B$ ($m^3/m$)','$\Delta V_D$ ($m^3/m$)','Dune Height (m)'])
         bdate = int(file[0:8])
@@ -906,10 +937,11 @@ def examineAndPlot_VarsVsBT_AllWays():
                     toe_post = scarpToes[scarp][1][ii][2]
                     
                     # Calc post-storm Bf #
-                    x_beta = T_scarps[scarp][1][ii]['X'][T_scarps[scarp][1][ii]['X']>=scarpToes[scarp][1][ii][0]]
-                    z_beta = T_scarps[scarp][1][ii]['Z'][T_scarps[scarp][1][ii]['X']>=scarpToes[scarp][1][ii][0]]
+                    x_beta = T_scarps[scarp][1][ii]['X'][np.logical_and(T_scarps[scarp][1][ii]['X']>=scarpToes[scarp][1][ii][0],T_scarps[scarp][1][ii]['Z']>=0.36)]
+                    z_beta = T_scarps[scarp][1][ii]['Z'][np.logical_and(T_scarps[scarp][1][ii]['X']>=scarpToes[scarp][1][ii][0],T_scarps[scarp][1][ii]['Z']>=0.36)]
                     try:
-                        Bf_post = abs((z_beta[-1]-z_beta[0])/(x_beta[-1]-x_beta[0]))
+                        b,yhat,r2,p_values = utils.linearRegression(x_beta[~np.isnan(z_beta)],z_beta[~np.isnan(z_beta)])
+                        Bf_post = -b[1]
                     except:
                         Bf_post = np.nan
                     
@@ -928,15 +960,15 @@ def examineAndPlot_VarsVsBT_AllWays():
                     twl = hydro.calcTWL(Bf_here,exceedance=2)
                     twl_ref = hydro.calcTWL(0.1,exceedance=2)
                     F = max(twl[:,1])-toe_pre
-
-                    if F<-0.9 and BT_here<-0.4:
-                        print('F='+str(F)+', BT='+str(BT_here))
-                        fig,ax = plt.subplots(1)
-                        ax.plot(T_scarps[scarp][0][ii]['X'],T_scarps[scarp][0][ii]['Z'],'k')
-                        ax.plot(T_scarps[scarp][1][ii]['X'],T_scarps[scarp][1][ii]['Z'],'grey')
-                        ax.plot(scarpToes[scarp][0][ii][0],scarpToes[scarp][0][ii][2],'ko')
-                        ax.plot(scarpToes[scarp][1][ii][0],scarpToes[scarp][1][ii][2],'o',color='grey')
-                        plt.show()
+##
+##                    if F<-0.9 and BT_here<-0.4:
+##                        print('F='+str(F)+', BT='+str(BT_here))
+##                        fig,ax = plt.subplots(1)
+##                        ax.plot(T_scarps[scarp][0][ii]['X'],T_scarps[scarp][0][ii]['Z'],'k')
+##                        ax.plot(T_scarps[scarp][1][ii]['X'],T_scarps[scarp][1][ii]['Z'],'grey')
+##                        ax.plot(scarpToes[scarp][0][ii][0],scarpToes[scarp][0][ii][2],'ko')
+##                        ax.plot(scarpToes[scarp][1][ii][0],scarpToes[scarp][1][ii][2],'o',color='grey')
+##                        plt.show()
                         
                     
                     # Calc toe dx #
@@ -1014,7 +1046,7 @@ def examineAndPlot_VarsVsBT_AllWays():
                     if len(impact_dur_i)==0:
                         impact_dur=0
                     elif len(impact_dur_i)==1:
-                        impact_dur=0.5
+                        impact_dur=0.01
                     else:
                         impact_dur = (len(impact_dur_i)-1)/2 # Assuming sampling is half hour #
                     
@@ -1080,12 +1112,12 @@ def examineAndPlot_VarsVsBT_AllWays():
                                               'Post-storm toe elev (m)':toe_post,
                                               '$Bf_{post}$':Bf_post,
                                               'dx (m)':dx,
-                                              'dx (m, contour)':dx_contour,
+                                              'countour dx (m)':dx_contour,
                                               'dz (m)':dz,
                                               'dz (m, contour)':dz_contour,
                                               '$B_{Dune}$':slope,
-                                              '$\Delta B_f$':slopeRatio,
-                                              '$Z_{eroded}$':heightEroded,
+                                              '$\Delta B_f (\%)$':slopeRatio*100,
+                                              '$Z_{eroded}$ (m)':heightEroded,
                                               'F (m)':F,
                                               'W (m)':width,
                                               't_i (hr)':impact_dur,
@@ -1134,6 +1166,36 @@ def examineAndPlot_VarsVsBT_AllWays():
     BT_all = [item for sublist in BT_all1 for item in sublist]
 
 
+    # 1:1 plot of two parameters #
+    p1 = 'F (m)'
+    p2 = 't_i (hr)'
+
+    vals_all_p1 =  []
+    vals_all_p2 =  []
+    ii = -1
+    for i in names:
+        ii+=1
+        try:
+            vals_p1 = results_byStorm.loc[results_byStorm['Name'] == i]['results'][ii][p1]
+            vals_p2 = results_byStorm.loc[results_byStorm['Name'] == i]['results'][ii][p2]
+        except:
+            ii-=1
+        else:
+            vals_all_p1.append(vals_p1)
+            vals_all_p2.append(vals_p2)
+
+    fig,ax = plt.subplots(1,figsize=(3.5,3))
+    h = []
+    for i in range(0,len(vals_all_p1)):
+        hh = ax.plot(vals_all_p1[i],vals_all_p2[i],'.',markersize=4)
+        h.append(hh[0])
+    ax.legend(h,names,loc='upper left',frameon=True,handletextpad=0.1,fontsize=8,ncol=1,markerscale=1)
+    ax.set_xlabel(r'$F_{T,2\%}$ (m)')
+    ax.set_ylabel(r'$t_{I,2\%}$ (hr)')
+    plt.subplots_adjust(left=0.182, bottom=0.16, right=0.9,top=0.914,wspace=0.2, hspace=0.2)
+    plt.savefig('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/figs/Submission1/FTvsImpactDur.png',dpi=400)
+            
+            
 
     # Example up vs. down profiles #
     file_up = files_use[1]
@@ -1143,24 +1205,35 @@ def examineAndPlot_VarsVsBT_AllWays():
     scarpResults=pickle.load(f)
     T_up = scarpResults.T_scarps
     toes_up = scarpResults.scarpToes
+    BT_up = scarpResults.BT
     f = open('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/data/'+file_down,'rb')
     scarpResults=pickle.load(f)
     T_down = scarpResults.T_scarps
     toes_down = scarpResults.scarpToes
+    BT_down = scarpResults.BT
       
     use_up = 5
-    use_down = 100#40
+    use_down = 29#40
     
     dv_ud = []
     for ud in ['up','down']:
         T = eval('T_'+ud)
-        x_end = eval('toes_'+ud+'[0][0][use_'+ud+'][0]')
-        x_start = max((min(T[0][0][eval('use_'+ud)]['X']),min(T[0][1][eval('use_'+ud)]['X'])))        
+        if ud=='up':
+            x_end = eval('toes_'+ud+'[0][0][use_'+ud+'][0]')
+            x_start = max((min(T[0][0][eval('use_'+ud)]['X']),min(T[0][1][eval('use_'+ud)]['X'])))
+        else:
+            x_end = eval('toes_'+ud+'[1][0][use_'+ud+'][0]')
+            x_start = max((min(T[1][0][eval('use_'+ud)]['X']),min(T[1][1][eval('use_'+ud)]['X'])))
         vol_dune1 = []
         for d in range(0,2):
-            i1 = np.logical_and(T[0][d][eval('use_'+ud)]['X']>=x_start,T[0][d][eval('use_'+ud)]['X']<=x_end)
-            xx = T[0][d][eval('use_'+ud)]['X'][i1]
-            zz = T[0][d][eval('use_'+ud)]['Z'][i1]
+            if ud=='up':
+                i1 = np.logical_and(T[0][d][eval('use_'+ud)]['X']>=x_start,T[0][d][eval('use_'+ud)]['X']<=x_end)
+                xx = T[0][d][eval('use_'+ud)]['X'][i1]
+                zz = T[0][d][eval('use_'+ud)]['Z'][i1]
+            else:
+                i1 = np.logical_and(T[1][d][eval('use_'+ud)]['X']>=x_start,T[1][d][eval('use_'+ud)]['X']<=x_end)
+                xx = T[1][d][eval('use_'+ud)]['X'][i1]
+                zz = T[1][d][eval('use_'+ud)]['Z'][i1]
             vol = np.trapz(zz[~np.isnan(zz)],xx[~np.isnan(zz)])
             vol_dune1.append(vol)
         dv = vol_dune1[1]-vol_dune1[0]
@@ -1170,28 +1243,36 @@ def examineAndPlot_VarsVsBT_AllWays():
     dv_up = dv_ud[0]
     dv_down = dv_ud[1]
     
-    fig,ax = plt.subplots(2,1,figsize=(4,4))
-    h1 = ax[0].plot(T_up[0][0][use_up]['X'],T_up[0][0][use_up]['Z'],'k',linewidth=2)
-    ax[0].plot(toes_up[0][0][use_up][0],toes_up[0][0][use_up][2],'ko')
-    h2 = ax[0].plot(T_up[0][1][use_up]['X'],T_up[0][1][use_up]['Z'],'grey',linewidth=2)
-    ax[0].plot(toes_up[0][1][use_up][0],toes_up[0][1][use_up][2],'o',color='grey')
-    ax[1].plot(T_down[0][0][use_down]['X'],T_down[0][0][use_down]['Z'],'k',linewidth=2)
-    ax[1].plot(toes_down[0][0][use_down][0],toes_down[0][0][use_down][2],'ko')
-    ax[1].plot(T_down[0][1][use_down]['X'],T_down[0][1][use_down]['Z'],'grey',linewidth=2)
-    ax[1].plot(toes_down[0][1][use_down][0],toes_down[0][1][use_down][2],'o',color='grey')  
-    ax[1].set_xlabel('Cross-shore (m)')
-    ax[1].set_ylabel('Elev. (m)')
-    ax[0].set_ylabel('Elev. (m)')
-    fig.legend([h1[0],h2[0]],['Pre-storm','Post-storm'],loc='upper center',ncol=2)
-    
-    ax[0].text(.6, .9,'Riley',ha='left', va='top',transform=ax[0].transAxes,fontsize=8,fontweight='bold')
-    ax[0].text(.6, .8,'Y = '+str(int(T_up[0][0][use_up]['Y'][0])),ha='left', va='top',transform=ax[0].transAxes,fontsize=8,fontweight='bold')
-    ax[0].text(.6, .7,'$\Delta V_D$ = '+str(round(dv_up,2))+' $m^3/m$',ha='left', va='top',transform=ax[0].transAxes,fontsize=8,fontweight='bold')
-    ax[1].text(.6, .9,'Dorian',ha='left', va='top',transform=ax[1].transAxes,fontsize=8,fontweight='bold')
-    ax[1].text(.6, .8,'Y = '+str(int(T_down[0][0][use_down]['Y'][0])),ha='left', va='top',transform=ax[1].transAxes,fontsize=8,fontweight='bold')
-    ax[1].text(.6, .7,'$\Delta V_D$ = '+str(round(dv_down,2))+' $m^3/m$',ha='left', va='top',transform=ax[1].transAxes,fontsize=8,fontweight='bold')
-    ax[0].text(0.03, 0.1, 'a', transform=ax[0].transAxes,fontsize=8, fontweight='bold', va='top',color='k')
-    ax[1].text(0.03, 0.1, 'b', transform=ax[1].transAxes,fontsize=8, fontweight='bold', va='top',color='k')    
+    def plot():
+        fig,ax = plt.subplots(2,1,figsize=(4,4))
+        h1 = ax[0].plot(T_up[0][0][use_up]['X'],T_up[0][0][use_up]['Z'],'k',linewidth=2)
+        ax[0].plot(toes_up[0][0][use_up][0],toes_up[0][0][use_up][2],'ko')
+        h2 = ax[0].plot(T_up[0][1][use_up]['X'],T_up[0][1][use_up]['Z'],'grey',linewidth=2)
+        ax[0].plot(toes_up[0][1][use_up][0],toes_up[0][1][use_up][2],'o',color='grey')
+        ax[1].plot(T_down[1][0][use_down]['X'],T_down[1][0][use_down]['Z'],'k',linewidth=2)
+        ax[1].plot(toes_down[1][0][use_down][0],toes_down[1][0][use_down][2],'ko')
+        ax[1].plot(T_down[1][1][use_down]['X'],T_down[1][1][use_down]['Z'],'grey',linewidth=2)
+        ax[1].plot(toes_down[1][1][use_down][0],toes_down[1][1][use_down][2],'o',color='grey')  
+        ax[1].set_xlabel('Cross-shore (m)')
+        ax[1].set_ylabel('Elev. (m, NAVD88)')
+        ax[0].set_ylabel('Elev. (m, NAVD88)')
+        ax[0].set_xlim(50,110)
+        ax[1].set_xlim(50,110)
+        fig.legend([h1[0],h2[0]],['Pre-storm','Post-storm'],loc='upper center',ncol=2)
+        
+        ax[0].text(.6, .9,'Riley',ha='left', va='top',transform=ax[0].transAxes,fontsize=8,fontweight='bold')
+        ax[0].text(.6, .8,'Y = '+str(int(T_up[0][0][use_up]['Y'][0]))+' m',ha='left', va='top',transform=ax[0].transAxes,fontsize=8,fontweight='bold')
+        ax[0].text(.6, .7,'$\Delta V_D$ = '+str(round(dv_up,2))+' $m^3/m$',ha='left', va='top',transform=ax[0].transAxes,fontsize=8,fontweight='bold')
+        ax[0].text(.6, .6,r'$\beta_T$ = '+str(round(BT_up[0][use_up],2)),ha='left', va='top',transform=ax[0].transAxes,fontsize=8,fontweight='bold')
+        ax[1].text(.6, .9,'Dorian',ha='left', va='top',transform=ax[1].transAxes,fontsize=8,fontweight='bold')
+        ax[1].text(.6, .8,'Y = '+str(int(T_down[1][0][use_down]['Y'][0]))+' m',ha='left', va='top',transform=ax[1].transAxes,fontsize=8,fontweight='bold')
+        ax[1].text(.6, .7,'$\Delta V_D$ = '+str(round(dv_down,2))+' $m^3/m$',ha='left', va='top',transform=ax[1].transAxes,fontsize=8,fontweight='bold')
+        ax[1].text(.6, .6,r'$\beta_T$ = '+str(round(BT_down[1][use_down],2)),ha='left', va='top',transform=ax[1].transAxes,fontsize=8,fontweight='bold')
+        ax[0].text(0.03, 0.1, 'a', transform=ax[0].transAxes,fontsize=8, fontweight='bold', va='top',color='k')
+        ax[1].text(0.03, 0.1, 'b', transform=ax[1].transAxes,fontsize=8, fontweight='bold', va='top',color='k')
+
+        plt.subplots_adjust(top=0.923)
+        plt.savefig('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/figs/Submission1/UpVsDown',dpi=450)
     
     # Histogram of a parameter for each storm #
     varsToPlot = ['$Z_{Toe}$ (m)'] 
@@ -1223,12 +1304,14 @@ def examineAndPlot_VarsVsBT_AllWays():
    
     
     # Bar plot of a parameter for each storm # 
-    colorVal = 'BT'
+    colorVal = '$B_{Dune}$'
+    vals_mean = []
     fig,axxx = plt.subplots(1,figsize=(6.5,2))
     for ii in range(0,len(results_byStorm)):
         name = results_byStorm.loc[ii]['Name']
         results = results_byStorm.loc[ii]['results']
         val_mean = np.nanmedian(results[colorVal])
+        vals_mean.append(val_mean)
         val_25 = np.nanpercentile(results[colorVal],25)
         val_75 = np.nanpercentile(results[colorVal],75)
         
@@ -1274,7 +1357,7 @@ def examineAndPlot_VarsVsBT_AllWays():
       
                 
     # Val vs. BT all scatter and storm-average #        
-    varsToPlot = 'F (m)'  
+    varsToPlot = 'Bf'  
     fig,ax = plt.subplots(1,2,figsize=(4,1.75))
     # ax = np.hstack([ax.reshape(-1,1),np.vstack([1,1,1])])
     plt.rcParams.update({'font.size': 8})
@@ -1406,8 +1489,8 @@ def examineAndPlot_VarsVsBT_AllWays():
         
         
     # Vals vs BT plots #
-    varsToPlot = ['F (m)']  
-    fig,ax = plt.subplots(3,len(varsToPlot),figsize=(3,5))
+    varsToPlot = ['$Z_{eroded}$ (m)','$\Delta B_f (\%)$','countour dx (m)']  
+    fig,ax = plt.subplots(3,len(varsToPlot),figsize=(6.5,5))
     if len(varsToPlot)==1:
         ax = np.hstack([ax.reshape(-1,1),np.vstack([1,1,1])])
     plt.rcParams.update({'font.size': 8})
@@ -1442,7 +1525,8 @@ def examineAndPlot_VarsVsBT_AllWays():
         for s in range(0,len(vals_all1)):
             ax[1,iii].plot(vals_all1[s],BT_all1[s],'.',markersize=2)
         ax[1,iii].set_xlabel(colorVal)
-        ax[1,iii].set_ylabel('BT')
+        if iii==0:
+            ax[1,iii].set_ylabel(r'$\beta_T$')
         ax[1,iii].set_ylim(-1,1)
     
 
@@ -1539,7 +1623,8 @@ def examineAndPlot_VarsVsBT_AllWays():
             ax[0,iii].plot((val_mean,val_75),(binedges[binn-1]+((binedges[binn]-binedges[binn-1])/2),binedges[binn-1]+((binedges[binn]-binedges[binn-1])/2)),'k')
             ax[0,iii].set_ylim(min(binedges),max(binedges))
             ax[0,iii].set_xlabel(colorVal)
-            ax[0,iii].set_ylabel('BT')
+            if iii==0:
+                ax[0,iii].set_ylabel(r'$\beta_T$')
             # ax[0,iii].text(0.033,((binedges[binn-1]-binedges[binn])/2)+binedges[binn],'n='+str(len(np.where(iBins==binn)[0])),va='center',ha='center')
             if colorVal==varsToPlot[-1]:
                 ax[0,iii].text(65,((binedges[binn-1]-binedges[binn])/2)+binedges[binn],'n='+str(len(np.where(iBins==binn)[0])),va='center',ha='left',fontsize=7)
@@ -1581,7 +1666,8 @@ def examineAndPlot_VarsVsBT_AllWays():
             ax[2,iii].plot( (val_mean,val_mean),(BT_mean,BT_75),'k',linewidth=1 )
             ax[2,iii].plot(val_mean,BT_mean,'s',alpha=alpha_scaled,markersize=14,label=results_byStorm.loc[ii]['Name'])
             ax[2,iii].set_xlabel(colorVal)
-            ax[2,iii].set_ylabel('BT')
+            if iii==0:
+                ax[2,iii].set_ylabel(r'$\beta_T$')
             # if iii==0:
             # ax[0,iii].set_xlim(ax[1,iii].get_xlim())
             # else:
@@ -1618,73 +1704,75 @@ def examineAndPlot_VarsVsBT_AllWays():
             
         if colorVal==varsToPlot[0]:
             fig.legend(loc='lower center',frameon=False,handletextpad=0.1,fontsize=8,ncol=3)
+    plt.subplots_adjust(left=0.125,bottom=0.204,right=0.9,top=0.944,wspace=0.2,hspace=0.2)
+    plt.savefig('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/figs/Submission1/Appendix1',dpi=450)
             
         
-        # Scatters for each storm #        
-        fig,ax = plt.subplots(3,3,figsize=(6,5))         
-        # fig,ax = plt.subplots(3,3,figsize=(8.3,7.8)) 
-        # plt.rc('axes', labelsize=22)    # fontsize of the x and y labels
-        # plt.rc('xtick', labelsize=16)    # fontsize of the tick labels
-        # plt.rc('ytick', labelsize=16)    # fontsize of the tick labels
-        # plt.rc('legend', fontsize=16) 
-
-        axx = []
-        for row in range(0,len(ax[:,0])):
-            for col in range(0,len(ax[0,:])):
-                axx.append(ax[row,col])
-        for s in range(0,len(vals_all1)):
-            iPos = np.where(np.sign(BT_all1[s])==1)[0]
-            iNeg = np.where(np.sign(BT_all1[s])==-1)[0]
-            axx[s].plot(vals_all1[s][iPos],BT_all1[s][iPos],'b.',markersize=2)
-            axx[s].plot(vals_all1[s][iNeg],BT_all1[s][iNeg],'r.',markersize=2)            
-            axx[s].set_title(results_byStorm['Name'][s],fontsize=12)
-            if s==6:
-                axx[s].set_xlabel(colorVal)
-                axx[s].set_ylabel('$B_T$')
-            params_pos,yhat_pos,r2_pos,p_values_pos = utils.linearRegression(vals_all1[s][iPos][np.logical_and(~np.isnan(vals_all1[s][iPos]),~np.isinf(BT_all1[s][iPos]))],
-                                                              BT_all1[s][iPos][np.logical_and(~np.isnan(vals_all1[s][iPos]),~np.isinf(BT_all1[s][iPos]))])
-            plt.text(.02, .34, 'm = '+str(round(params_pos[1],1)),ha='left', va='center',transform=axx[s].transAxes,color='b',fontsize=8)
-            plt.text(.02, .22, '$R^2$ = '+str(round(r2_pos,1)),ha='left', va='center',transform=axx[s].transAxes,color='b',fontsize=8)
-            plt.text(.02, .1, 'p = '+str(round(p_values_pos[1],2)),ha='left', va='center',transform=axx[s].transAxes,color='b',fontsize=8)
-            
-            try:
-                params_neg,yhat_neg,r2_neg,p_values_neg = utils.linearRegression(vals_all1[s][iNeg][np.logical_and(~np.isnan(vals_all1[s][iNeg]),~np.isinf(BT_all1[s][iNeg]))],
-                                                              BT_all1[s][iNeg][np.logical_and(~np.isnan(vals_all1[s][iNeg]),~np.isinf(BT_all1[s][iNeg]))])
-            except:
-                pass
-            else:       
-                plt.text(.98, .34, 'm = '+str(round(params_neg[1],1)),ha='right', va='center',transform=axx[s].transAxes,color='r',fontsize=8)
-                plt.text(.98, .22, '$R^2$ = '+str(round(r2_neg,1)),ha='right', va='center',transform=axx[s].transAxes,color='r',fontsize=8)
-                plt.text(.98, .1, 'p = '+str(round(p_values_neg[1],2)),ha='right', va='center',transform=axx[s].transAxes,color='r',fontsize=8)
-                    
-        for ii in range(0,len(results_byStorm)):
-            name = results_byStorm.loc[ii]['Name']
-            results = results_byStorm.loc[ii]['results']
-            BT_mean = np.nanmedian(results['BT'][np.where(results['BT']!=-np.inf)[0]])
-            BT_25 = np.nanpercentile(results['BT'][np.where(results['BT']!=-np.inf)[0]],25)
-            BT_75 = np.nanpercentile(results['BT'][np.where(results['BT']!=-np.inf)[0]],75)
-            val_mean = np.nanmedian(results[colorVal])
-            val_25 = np.nanpercentile(results[colorVal],25)
-            val_75 = np.nanpercentile(results[colorVal],75)
-            
-            n = len(results[colorVal])
-            alpha_scaled = 0.8#((n-20)/(100-20))
-            # if alpha_scaled<0.1:
-            #     alpha_scaled=0.1
-            # print(alpha_scaled)
-            axx[-2].plot( (val_mean,val_25),(BT_mean,BT_mean),'k',linewidth=1 )
-            axx[-2].plot( (val_mean,val_75),(BT_mean,BT_mean),'k',linewidth=1 )
-            axx[-2].plot( (val_mean,val_mean),(BT_mean,BT_25),'k',linewidth=1 )
-            axx[-2].plot( (val_mean,val_mean),(BT_mean,BT_75),'k',linewidth=1 )
-            axx[-2].plot(val_mean,BT_mean,'s',alpha=alpha_scaled,markersize=14,label=results_byStorm.loc[ii]['Name'])
-            axx[-2].set_xlabel(colorVal)
-            
-        axx[-1].spines['left'].set_visible(False)
-        axx[-1].spines['right'].set_visible(False)
-        axx[-1].spines['top'].set_visible(False)
-        axx[-1].spines['bottom'].set_visible(False)
-        axx[-1].set_xticks([])
-        axx[-1].set_yticks([])
+##        # Scatters for each storm #        
+##        fig,ax = plt.subplots(3,3,figsize=(6,5))         
+##        # fig,ax = plt.subplots(3,3,figsize=(8.3,7.8)) 
+##        # plt.rc('axes', labelsize=22)    # fontsize of the x and y labels
+##        # plt.rc('xtick', labelsize=16)    # fontsize of the tick labels
+##        # plt.rc('ytick', labelsize=16)    # fontsize of the tick labels
+##        # plt.rc('legend', fontsize=16) 
+##
+##        axx = []
+##        for row in range(0,len(ax[:,0])):
+##            for col in range(0,len(ax[0,:])):
+##                axx.append(ax[row,col])
+##        for s in range(0,len(vals_all1)):
+##            iPos = np.where(np.sign(BT_all1[s])==1)[0]
+##            iNeg = np.where(np.sign(BT_all1[s])==-1)[0]
+##            axx[s].plot(vals_all1[s][iPos],BT_all1[s][iPos],'b.',markersize=2)
+##            axx[s].plot(vals_all1[s][iNeg],BT_all1[s][iNeg],'r.',markersize=2)            
+##            axx[s].set_title(results_byStorm['Name'][s],fontsize=12)
+##            if s==6:
+##                axx[s].set_xlabel(colorVal)
+##                axx[s].set_ylabel('$B_T$')
+##            params_pos,yhat_pos,r2_pos,p_values_pos = utils.linearRegression(vals_all1[s][iPos][np.logical_and(~np.isnan(vals_all1[s][iPos]),~np.isinf(BT_all1[s][iPos]))],
+##                                                              BT_all1[s][iPos][np.logical_and(~np.isnan(vals_all1[s][iPos]),~np.isinf(BT_all1[s][iPos]))])
+##            plt.text(.02, .34, 'm = '+str(round(params_pos[1],1)),ha='left', va='center',transform=axx[s].transAxes,color='b',fontsize=8)
+##            plt.text(.02, .22, '$R^2$ = '+str(round(r2_pos,1)),ha='left', va='center',transform=axx[s].transAxes,color='b',fontsize=8)
+##            plt.text(.02, .1, 'p = '+str(round(p_values_pos[1],2)),ha='left', va='center',transform=axx[s].transAxes,color='b',fontsize=8)
+##            
+##            try:
+##                params_neg,yhat_neg,r2_neg,p_values_neg = utils.linearRegression(vals_all1[s][iNeg][np.logical_and(~np.isnan(vals_all1[s][iNeg]),~np.isinf(BT_all1[s][iNeg]))],
+##                                                              BT_all1[s][iNeg][np.logical_and(~np.isnan(vals_all1[s][iNeg]),~np.isinf(BT_all1[s][iNeg]))])
+##            except:
+##                pass
+##            else:       
+##                plt.text(.98, .34, 'm = '+str(round(params_neg[1],1)),ha='right', va='center',transform=axx[s].transAxes,color='r',fontsize=8)
+##                plt.text(.98, .22, '$R^2$ = '+str(round(r2_neg,1)),ha='right', va='center',transform=axx[s].transAxes,color='r',fontsize=8)
+##                plt.text(.98, .1, 'p = '+str(round(p_values_neg[1],2)),ha='right', va='center',transform=axx[s].transAxes,color='r',fontsize=8)
+##                    
+##        for ii in range(0,len(results_byStorm)):
+##            name = results_byStorm.loc[ii]['Name']
+##            results = results_byStorm.loc[ii]['results']
+##            BT_mean = np.nanmedian(results['BT'][np.where(results['BT']!=-np.inf)[0]])
+##            BT_25 = np.nanpercentile(results['BT'][np.where(results['BT']!=-np.inf)[0]],25)
+##            BT_75 = np.nanpercentile(results['BT'][np.where(results['BT']!=-np.inf)[0]],75)
+##            val_mean = np.nanmedian(results[colorVal])
+##            val_25 = np.nanpercentile(results[colorVal],25)
+##            val_75 = np.nanpercentile(results[colorVal],75)
+##            
+##            n = len(results[colorVal])
+##            alpha_scaled = 0.8#((n-20)/(100-20))
+##            # if alpha_scaled<0.1:
+##            #     alpha_scaled=0.1
+##            # print(alpha_scaled)
+##            axx[-2].plot( (val_mean,val_25),(BT_mean,BT_mean),'k',linewidth=1 )
+##            axx[-2].plot( (val_mean,val_75),(BT_mean,BT_mean),'k',linewidth=1 )
+##            axx[-2].plot( (val_mean,val_mean),(BT_mean,BT_25),'k',linewidth=1 )
+##            axx[-2].plot( (val_mean,val_mean),(BT_mean,BT_75),'k',linewidth=1 )
+##            axx[-2].plot(val_mean,BT_mean,'s',alpha=alpha_scaled,markersize=14,label=results_byStorm.loc[ii]['Name'])
+##            axx[-2].set_xlabel(colorVal)
+##            
+##        axx[-1].spines['left'].set_visible(False)
+##        axx[-1].spines['right'].set_visible(False)
+##        axx[-1].spines['top'].set_visible(False)
+##        axx[-1].spines['bottom'].set_visible(False)
+##        axx[-1].set_xticks([])
+##        axx[-1].set_yticks([])
 
         fig.legend(loc='upper left',bbox_to_anchor=[0.67,0.26],frameon=False,handletextpad=0.1,fontsize=8,ncol=2)
 
@@ -1753,6 +1841,7 @@ def examineAndPlot_TWLVsBT():
         f = open('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/data/'+file,'rb')
         scarpResults=pickle.load(f)
         Bf = scarpResults.Bf
+        print(Bf[0])
         BT = scarpResults.BT
         scarpToes = scarpResults.scarpToes
         T_scarps = scarpResults.T_scarps
@@ -1821,7 +1910,6 @@ def examineAndPlot_TWLVsBT():
             
         results_byStorm = results_byStorm.append({'Name':name,'results':results},ignore_index=True)
 
-
     # Val vs. BT all scatter and storm-average #        
     BT_mean = []
     F_mean = []
@@ -1866,76 +1954,101 @@ def examineAndPlot_TWLVsBT():
         F_all.append(F_all1)
         ti_all.append(ti_all1)
         
-    fig,ax = plt.subplots(3,2,figsize=(6.5,5))
+    fig,ax = plt.subplots(3,2,figsize=(3.25,6))
     excs=[2,7,16]
     for i in range(0,len(excs)):
-        [ax[i][0].plot(F_all[i][ii],BT_all[i][ii],'.',markersize=2) for ii in range(0,len(BT_all[0]))]
+        [ax[i][0].plot(ti_all[i][ii],BT_all[i][ii],'.',markersize=2) for ii in range(0,len(BT_all[0]))]
         hh = []
         for ii in range(0,len(F_mean[i])):
-            ax[i][1].plot((F_mean[i][ii][0],F_mean[i][ii][0]),(BT_mean[ii][0],BT_mean[ii][1][0]),'k',linewidth=1)
-            ax[i][1].plot((F_mean[i][ii][0],F_mean[i][ii][0]),(BT_mean[ii][0],BT_mean[ii][1][1]),'k',linewidth=1)
-            ax[i][1].plot((F_mean[i][ii][0],F_mean[i][ii][1][0]),(BT_mean[ii][0],BT_mean[ii][0]),'k',linewidth=1)
-            ax[i][1].plot((F_mean[i][ii][0],F_mean[i][ii][1][1]),(BT_mean[ii][0],BT_mean[ii][0]),'k',linewidth=1)
-            hh.append(ax[i][1].plot(F_mean[i][ii][0],BT_mean[ii][0],'s',alpha=0.8,markersize=14))
+            ax[i][1].plot((ti_mean[i][ii][0],ti_mean[i][ii][0]),(BT_mean[ii][0],BT_mean[ii][1][0]),'k',linewidth=1)
+            ax[i][1].plot((ti_mean[i][ii][0],ti_mean[i][ii][0]),(BT_mean[ii][0],BT_mean[ii][1][1]),'k',linewidth=1)
+            ax[i][1].plot((ti_mean[i][ii][0],ti_mean[i][ii][1][0]),(BT_mean[ii][0],BT_mean[ii][0]),'k',linewidth=1)
+            ax[i][1].plot((ti_mean[i][ii][0],ti_mean[i][ii][1][1]),(BT_mean[ii][0],BT_mean[ii][0]),'k',linewidth=1)
+            hh.append(ax[i][1].plot(ti_mean[i][ii][0],BT_mean[ii][0],'s',alpha=0.8,markersize=14))
 
             def power_law(x, a, b, c):
                 return (a*np.power(x,b))+c
+            def exp_law(x,a,b,c):
+                return(-a**(b-x))+c
 
-            xx = np.hstack([F_all[i][ii] for ii in range(0,len(BT_all[0]))])
-            yy = np.hstack([BT_all[i][ii] for ii in range(0,len(BT_all[0]))])
-            pars, cov = curve_fit(f=power_law, 
-                              xdata=xx[~np.isnan(xx)]+5, 
-                              ydata=yy[~np.isnan(xx)],
-                              p0=[0,-5,0], 
-                              bounds=(-np.inf, np.inf),
-                              maxfev=10000)
-            yhat_all =  (pars[0]*np.power(xx[~np.isnan(xx)]+5,pars[1]))+pars[2]
-            print(pars)
+##            xx = np.hstack([F_all[i][ii] for ii in range(0,len(BT_all[0]))])
+##            yy = np.hstack([BT_all[i][ii] for ii in range(0,len(BT_all[0]))])
+##            pars, cov = curve_fit(f=exp_law, 
+##                  xdata=xx[xx>0], 
+##                  ydata=yy[xx>0],
+##                  p0=[9,-0.4,0.4], 
+##                  bounds=(-np.inf, np.inf),
+##                  maxfev=10000)
+##            yhat_all = -pars[0]**(pars[1]-xx[xx>0])+pars[2]
+##            
+##
+##            sst = np.sum((yy[~np.isnan(xx)]-np.mean(yy[~np.isnan(xx)]))**2)
+##            ssr = np.sum((yhat_all-np.mean(yy[~np.isnan(xx)]))**2)
+##            r2_all = ssr/sst
+##
+##            xx = np.array([F_mean[i][ii][0] for ii in range(0,len(F_mean[0]))])
+##            yy = np.array([BT_mean[ii][0] for ii in range(0,len(BT_mean))])
+##            pars, cov = curve_fit(f=exp_law, 
+##                  xdata=xx[xx>0], 
+##                  ydata=yy[xx>0],
+##                  p0=[9,-0.4,0.4], 
+##                  bounds=(-np.inf, np.inf),
+##                  maxfev=10000)
+##            yhat_mean = -pars[0]**(pars[1]-xx[xx>0])+pars[2]
+##            
+##
+##            sst = np.sum((yy[~np.isnan(xx)]-np.mean(yy[~np.isnan(xx)]))**2)
+##            ssr = np.sum((yhat_mean-np.mean(yy[~np.isnan(xx)]))**2)
+##            r2_mean = ssr/sst
+##
+##
+##            print((r2_all,r2_mean))
 
-            sst = np.sum((yy[~np.isnan(xx)]-np.mean(yy[~np.isnan(xx)]))**2)
-            ssr = np.sum((yhat_all-np.mean(yy[~np.isnan(xx)]))**2)
-            r2_all = ssr/sst
-
-            xx = np.array([F_mean[i][ii][0] for ii in range(0,len(F_mean[0]))])
-            yy = np.array([BT_mean[ii][0] for ii in range(0,len(BT_mean))])
-            pars, cov = curve_fit(f=power_law, 
-                              xdata=xx[~np.isnan(xx)]+5, 
-                              ydata=yy[~np.isnan(xx)],
-                              p0=[0,-5,0], 
-                              bounds=(-np.inf, np.inf),
-                              maxfev=10000)
-            yhat_mean =  (pars[0]*np.power(xx[~np.isnan(xx)]+5,pars[1]))+pars[2]
-            print(pars)
-
-            sst = np.sum((yy[~np.isnan(xx)]-np.mean(yy[~np.isnan(xx)]))**2)
-            ssr = np.sum((yhat_mean-np.mean(yy[~np.isnan(xx)]))**2)
-            r2_mean = ssr/sst
 
 
-            print((r2_all,r2_mean))
+        ax[i,0].set_ylabel(r'$ \beta_T $')
+##        ax[i,1].set_ylabel(r'$ \beta_T $')
 
+        fig.legend([ii[0] for ii in hh],['2013NE','Riley','Dorian','2019NE1','2019NE2','Teddy','2021NE'],loc='upper center',
+               frameon=True,handletextpad=0.1,fontsize=8,ncol=2,markerscale=0.5)
+        ax[0,0].set_xlabel(r'$t_{I,2\%}$ (hr)')
+        ax[0,1].set_xlabel(r'$t_{I,2\%}$ (hr)')
+        ax[1,0].set_xlabel(r'$t_{I,7\%}$ (hr)')
+        ax[1,1].set_xlabel(r'$t_{I,7\%}$ (hr)')        
+        ax[2,0].set_xlabel(r'$t_{I,16\%}$ (hr)')
+        ax[2,1].set_xlabel(r'$t_{I,16\%}$ (hr)')
+##        ax[0,0].text(-.65,.5,'R2%',fontweight='bold',fontsize=10,transform=ax[0,0].transAxes)
+##        ax[1,0].text(-.65,.5,'R7%',fontweight='bold',fontsize=10,transform=ax[1,0].transAxes)
+##        ax[2,0].text(-.65,.5,'R16%',fontweight='bold',fontsize=10,transform=ax[2,0].transAxes)
+        ax[0,0].text(0.01,0.9,'g',fontsize=8,fontweight='bold',transform=ax[0][0].transAxes)
+        ax[0,1].text(0.01,0.9,'h',fontsize=8,fontweight='bold',transform=ax[0][1].transAxes)
+        ax[1,0].text(0.01,0.9,'i',fontsize=8,fontweight='bold',transform=ax[1][0].transAxes)
+        ax[1,1].text(0.01,0.9,'j',fontsize=8,fontweight='bold',transform=ax[1][1].transAxes)            
+        ax[2,0].text(0.01,0.9,'k',fontsize=8,fontweight='bold',transform=ax[2][0].transAxes)
+        ax[2,1].text(0.01,0.9,'l',fontsize=8,fontweight='bold',transform=ax[2][1].transAxes)
 
+        plt.subplots_adjust(left=0.2, bottom=0.11, right=0.95, top=0.87, wspace=0.414, hspace=0.42)
+        plt.savefig('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/figs/Submission1/BTvsFTandImpactDur_Rm_2.png',dpi=450)
+    
 
-        ax[i,0].set_ylabel('$B_T$')
-        ax[i,1].set_ylabel('$B_T$')
+    # FT vs. BT colored by duration #
+    def plot():
+        fig = plt.figure(figsize=(4,3.5))
+        ax = plt.axes([0.18,0.15,0.77,0.72])
+        cbax = plt.axes([0.4,0.95,0.3,0.03])
+        h = [ax.scatter(F_all[0][ii],BT_all[0][ii],2,ti_all[0][ii],cmap='jet',vmin=0,vmax=48) for ii in range(0,len(BT_all[0]))]
+        fig.colorbar(h[0],cax=cbax,orientation='horizontal',ticks=[0,24,48])
+        fig.text(0.71,0.965,'$t_I$ (hr)',ha='left',va='center')
+        ax.set_xlabel('$F_T$ (m)')
+        ax.set_ylabel(r'$ \beta_T $')
+        plt.savefig('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/figs/Submission1/BTvsFT_Duration.png',dpi=450)
+        plt.show()
 
-        fig.legend([ii[0] for ii in hh],['2013NE','Riley','Dorian','2019NE1','2019NE2','Teddy','2021NE'],loc='center right',
-               frameon=False,handletextpad=0.1,fontsize=8,ncol=1,markerscale=0.5)
-        ax[2,0].set_xlabel('$F_T$ (m)')
-        ax[2,1].set_xlabel('$F_T$ (m)')
-        ax[0,0].text(-.65,.5,'R2%',fontweight='bold',fontsize=10,transform=ax[0,0].transAxes)
-        ax[1,0].text(-.65,.5,'R7%',fontweight='bold',fontsize=10,transform=ax[1,0].transAxes)
-        ax[2,0].text(-.65,.5,'R16%',fontweight='bold',fontsize=10,transform=ax[2,0].transAxes)
-        ax[0,0].text(0.01,0.9,'a',fontsize=8,fontweight='bold',transform=ax[0][0].transAxes)
-        ax[0,1].text(0.01,0.9,'b',fontsize=8,fontweight='bold',transform=ax[0][1].transAxes)
-        ax[1,0].text(0.01,0.9,'c',fontsize=8,fontweight='bold',transform=ax[1][0].transAxes)
-        ax[1,1].text(0.01,0.9,'d',fontsize=8,fontweight='bold',transform=ax[1][1].transAxes)            
-        ax[2,0].text(0.01,0.9,'e',fontsize=8,fontweight='bold',transform=ax[2][0].transAxes)
-        ax[2,1].text(0.01,0.9,'f',fontsize=8,fontweight='bold',transform=ax[2][1].transAxes)                
     
     
+
     
-    # TWL vs. BT this study and literature studies #
+    # FT vs. BT this study and literature studies #
     BT_BL = [0.21,0.13]
     F_BL = [0.73,0.58]
     BT_SP = [0.05,0.11,-0.7,0.01,0.05]          
@@ -1958,20 +2071,32 @@ def examineAndPlot_TWLVsBT():
     BT_all = np.hstack([BT,BT_BL,BT_SP,BT_OL])
     F_all = np.hstack([F,F_BL,F_SP,F_OL])
     
-    def power_law(x, a, b, c):
-        return (a*np.power(x,b))+c
-    pars, cov = curve_fit(f=power_law, 
-                      xdata=F_all[~np.isnan(list(F_all))]+5, 
-                      ydata=BT_all[~np.isnan(list(F_all))],
-                      p0=[0,-5,0], 
-                      bounds=(-np.inf, np.inf),
-                      maxfev=10000)
-    yhat_power =  (pars[0]*np.power(F_all[~np.isnan(list(F_all))]+5,pars[1]))+pars[2]
+    def power_law(x, a, b, c, d):
+        return (a*((x-b)**c))+d
+    def exp_law(x,a,b,c):
+        return(-a**(b-x))+c
 
-    sst = np.sum((BT_all[~np.isnan(list(F_all))]-np.mean(BT_all[~np.isnan(list(F_all))]))**2)
-    ssr = np.sum((yhat_power-np.mean(BT_all[~np.isnan(list(F_all))]))**2)
-    r2_all_power = ssr/sst
-    print(r2_all_power)
+    iWeight = int(np.where(abs(BT_all[~np.isnan(list(F_all))]--0.876)==min(abs(BT_all[~np.isnan(list(F_all))]--0.876)))[0])
+    sigma = np.ones(len(BT_all[~np.isnan(list(F_all))]))
+    sigma[iWeight] = 1#0.01
+    xdata = F_all[~np.isnan(list(F_all))]
+    ydata = BT_all[~np.isnan(list(F_all))]
+    pars, cov = curve_fit(f=exp_law, 
+                      xdata=xdata[xdata>0], 
+                      ydata=ydata[xdata>0],
+                      p0=[9,-0.4,0.4], 
+                      bounds=(-np.inf, np.inf),
+                      sigma=sigma[xdata>0],
+                      maxfev=10000)
+##    yhat_power = pars[0]*((F_all[~np.isnan(list(F_all))]-pars[1])**pars[2])+pars[3]
+    yhat_exp = -pars[0]**(pars[1]-xdata[xdata>0])+pars[2]
+
+
+    sst = np.sum((ydata[xdata>0]-np.mean(ydata[xdata>0]))**2)
+    ssr = np.sum((yhat_exp-np.mean(ydata[xdata>0]))**2)
+    r2_all = ssr/sst
+    print(r2_all)
+
     
     fig = plt.figure(figsize=(4,3.5))
     ax = plt.axes([0.18,0.15,0.77,0.8])
@@ -1979,11 +2104,57 @@ def examineAndPlot_TWLVsBT():
     ax.plot(F_SP,BT_SP,'mo',markersize=4,label='Splinter & Palmsten (2012)')
     ax.plot(F_BL,BT_BL,'co',markersize=4,label='Bonte & Levoy (2015)')
     ax.plot(F_OL,BT_OL,'yo',markersize=4,label='Overbeck et al. (2017)')
-    ax.plot(F_all[~np.isnan(list(F_all))][np.argsort(F_all[~np.isnan(list(F_all))])],yhat_power[np.argsort(F_all[~np.isnan(list(F_all))])],'r',linewidth=2,label='$y = '+str(round(pars[0],2))+'x^{'+str(round(pars[1],2))+'}+ '+str(round(pars[2],2))+'$')
+    ax.plot(xdata[xdata>0][np.argsort(xdata[xdata>0])],yhat_exp[np.argsort(xdata[xdata>0])],'r',linewidth=2,
+            label='$y = -'+str(round(pars[0],2))+'^{'+str(round(pars[1],2))+'-x}+'+str(round(pars[2],2))+'$')
     ax.legend(fontsize=8,loc='lower right',borderpad=0.1,handletextpad=0.1)
     ax.set_xlabel('$F_T$ (m)')
-    ax.set_ylabel('$B_T$')
-    plt.show()
+    ax.set_ylabel(r'$ \beta_T $')
+    plt.savefig('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/figs/Submission1/BTvsFT_Lit.png',dpi=450)
+
+
+
+
+
+
+    def linear_law(x, a, b):
+        return (a*x)+b
+    xdataP = F_all[~np.isnan(list(F_all))][BT_all[~np.isnan(list(F_all))]>0]
+    ydataP = BT_all[~np.isnan(list(F_all))][BT_all[~np.isnan(list(F_all))]>0]
+    pars, cov = curve_fit(f=linear_law, 
+                      xdata=xdataP, 
+                      ydata=ydataP,
+                      p0=[0,0], 
+                      bounds=(-np.inf, np.inf),
+                      maxfev=10000)
+    yhat_pos = (pars[0]*xdataP)+pars[1]
+
+    def cubic_law(x,a,b):
+        return(a*(x**3))+b
+    xdataN = F_all[~np.isnan(list(F_all))][BT_all[~np.isnan(list(F_all))]<0]
+    ydataN = BT_all[~np.isnan(list(F_all))][BT_all[~np.isnan(list(F_all))]<0]
+    Z_N = (xdataN-np.mean(xdataN))/np.std(xdataN)
+    pars, cov = curve_fit(f=cubic_law, 
+                      xdata=xdataN[abs(Z_N)<3], 
+                      ydata=ydataN[abs(Z_N)<3],
+                      p0=[0,0], 
+                      bounds=(-np.inf, np.inf),
+                      maxfev=10000)
+    yhat_neg = (pars[0]*(xdataN[abs(Z_N)<3]**3))+pars[1]
+
+
+    def makeFig():
+        fig = plt.figure(figsize=(4,3.5))
+        ax = plt.axes([0.18,0.15,0.77,0.8])
+        ax.plot(F,BT,'k.',markersize=1,label='This study')
+        ax.plot(F_SP,BT_SP,'mo',markersize=4,label='Splinter & Palmsten (2012)')
+        ax.plot(F_BL,BT_BL,'co',markersize=4,label='Bonte & Levoy (2015)')
+        ax.plot(F_OL,BT_OL,'yo',markersize=4,label='Overbeck et al. (2017)')
+        ax.plot(xdataP[np.argsort(xdataP)],yhat_pos[np.argsort(xdataP)],'r',linewidth=2)
+        ax.plot(xdataN[np.argsort(xdataN)],yhat_neg[np.argsort(xdataN)],'r',linewidth=2)
+        ax.legend(fontsize=8,loc='lower right',borderpad=0.1,handletextpad=0.1)
+        ax.set_xlabel('$F_T$ (m)')
+        ax.set_ylabel('$B_T$')
+        plt.show()
     
     
     
@@ -1995,6 +2166,7 @@ def examineAndPlot_TWLVsBT():
         twl2 = np.array(results['$TWL_{R2%}$'])[np.where(abs(results['BT'])<1)[0]]
         twl50 = np.array(results['$TWL_{R50%}$'])[np.where(abs(results['BT'])<1)[0]]
         twlr.append(twl50/twl2)
+    return twlr
     fig,ax = plt.subplots(1,figsize=(6.5,2))
     for i in range(0,len(twlr)):
         R = Rectangle((i+1-0.4,0),0.8,np.nanmedian(twlr[i]))
@@ -2111,13 +2283,13 @@ def plotDuneChangeSummary():
     # Plot the storms with labels #
     fig = plt.figure(figsize=(3.25,6))
     plt.rcParams.update({'font.size': 8})
-    ax1 = plt.axes([0.1,0.08,0.72,0.25])#plt.axes([0.15,0.08,0.72,0.25])
+    ax1 = plt.axes([0.08,0.08,0.72,0.25])#plt.axes([0.15,0.08,0.72,0.25])
     ax1.set_xlim(0,4000)
     ax1.set_ylim(datetime.datetime(2013,1,1),datetime.datetime(2014,12,31))
     ax1.spines['top'].set_visible(False)
     ax1.set_yticks([datetime.datetime(2013,1,1),datetime.datetime(2014,1,1)])
     ax1.yaxis.set_major_formatter(myFmt)
-    ax2 = plt.axes([0.1,0.33,0.72,0.62])#plt.axes([0.15,0.33,0.72,0.62])
+    ax2 = plt.axes([0.08,0.33,0.72,0.62])#plt.axes([0.15,0.33,0.72,0.62])
     ax2.set_xlim(0,4000)
     ax2.set_ylim(datetime.datetime(2017,1,1),datetime.datetime(2021,12,13)) 
     ax2.spines['bottom'].set_visible(False)
@@ -2179,15 +2351,36 @@ def plotDuneChangeSummary():
             a = ax.scatter(locs,times,200,vals,marker='|',cmap=ryb,vmin=-0.2,vmax=0.2,alpha=1)
 
 
-    cbax = plt.axes([0.33,0.3,0.3,0.01])#plt.axes([0.33,0.3,0.3,0.01])
+    cbax = plt.axes([0.30,0.3,0.3,0.01])#plt.axes([0.35,0.3,0.3,0.01])
     cbax.set_xticks([])
     cbax.set_yticks([])
-    plt.colorbar(a,cbax,orientation='horizontal',label='BT',ticks=[-0.2,0,0.2])   
+    plt.colorbar(a,cbax,orientation='horizontal',label=r'$ \beta_T $',ticks=[-0.2,0,0.2])   
     
-    ax2.text(0.02,0.97,'a',transform=ax2.transAxes,fontweight='bold')
-##    ax2.set_yticklabels([])
-##    ax1.set_yticklabels([])
-    
+    ax2.text(0.02,0.97,'b',transform=ax2.transAxes,fontweight='bold')
+    ax2.set_yticklabels([])
+    ax1.set_yticklabels([])
+    plt.savefig('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/figs/Submission1/DuneChangeSummary_2',dpi=450)
+
+    # Plot histograms #
+    V = []
+    BT = []
+    for ii in range(0,len(results_byStorm)):
+        name = results_byStorm.loc[ii]['Name']
+        V.append(results_byStorm.loc[ii]['results']['$\Delta V_D$ ($m^3/m$)'])
+        BT.append(results_byStorm.loc[ii]['results']['BT'])
+    return V,BT
+    def plot():
+        fig,ax = plt.subplots(2,1,figsize=(6,2),sharex=True)
+        ax[0].boxplot(V,showfliers=False,labels=names)
+        ax[1].boxplot(BT,showfliers=False,labels=names)
+        ax[0].set_ylabel('$\Delta V_D$ ($m^3/m$)')
+        ax[1].set_ylabel(r'$ \beta_T $')
+        ax[1].set_ylim(-0.9,0.7)
+        fig.align_ylabels()
+        ax[0].text(0.005,0.85,'c',transform=ax[0].transAxes,fontweight='bold')
+        ax[1].text(0.005,0.85,'d',transform=ax[1].transAxes,fontweight='bold')
+        plt.savefig('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/figs/Submission1/DuneChangeSummary_3',dpi=450)
+          
     
     # Plot the bar plots #
     fig,ax = plt.subplots(4,1,figsize=(6.5,3),sharex=True)
@@ -2321,14 +2514,17 @@ def plotStormParams():
         toes = mgr.idDuneToe(T, method='mc_supervised')
         Bf = []
         for ii in range(0,len(toes[0])):
-        
-            x_beta = T[0][ii]['X'][T[0][ii]['X']>=toes[0][ii,0]]                       
-            z_beta = T[0][ii]['Z'][T[0][ii]['X']>=toes[0][ii,0]]
+
+
+            x_beta = T[0][ii]['X'][np.logical_and(T[0][ii]['X']>=toes[0][ii,0],T[0][ii]['Z']>=0.36)]
+            z_beta = T[0][ii]['Z'][np.logical_and(T[0][ii]['X']>=toes[0][ii,0],T[0][ii]['Z']>=0.36)]
             try:
-                m = abs((z_beta[-1]-z_beta[0])/(x_beta[-1]-x_beta[0]))
+                b,yhat,r2,p_values = utils.linearRegression(x_beta[~np.isnan(z_beta)],z_beta[~np.isnan(z_beta)])
+                m=b[1]
             except:
                 m = np.nan
-            Bf.append(m)
+            Bf.append(-m)
+
         
         twl = []
         F =[]
@@ -2418,11 +2614,9 @@ def plotStormParams():
             xl = ax[c].get_xlim()
             ax[c].plot(xl,(0,0),'k',linewidth=.5)
             ax[c].set_xlim(xl)
-    plt.show()
     
     
-    
-    
+      
     def runAvg(x,y,window=10):
         xx = x[0]
         x_smooth=[]
@@ -2453,7 +2647,7 @@ def plotStormParams():
         ax[-i-1].set_ylim(1.5,5.5)
         
         try:
-            f = open('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/data/'+files_use[i][0:17]+'_5km_scarpResults_mc_supervised.pkl','rb')
+            f = open('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/data/'+files_use[i][0:17]+'_5km_scarpResults_mc_supervised2.pkl','rb')
         except:
             pass
         else:
@@ -2478,7 +2672,9 @@ def plotStormParams():
         ax[-1].set_xlabel('Alongshore (m)')
         ax[4].set_ylabel('Elev (m)')
         fig.legend([h1[0],h2[0]],['$Z_{toe}$','$TWL_{2\%}$'],loc='upper center',ncol=2,frameon=False)
-             
+
+    plt.subplots_adjust(left=0.125,bottom=0.11,right=0.812,top=0.945,wspace=0.2,hspace=0.2)
+    plt.savefig('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/figs/Submission1/TWLVsZToeVsRetreat',dpi=450)
     plt.show()  
     
     
@@ -2646,8 +2842,7 @@ def plotHydroTimeseries():
             hydro.waves = waves
             twl_all.append(hydro.calcTWL(beta=0.1,exceedance=2))
                 
-            
-        
+             
     waves = pd.concat(waves_all,ignore_index=True)
     wl = pd.concat(wl_all,ignore_index=True)
     twl = np.vstack(twl_all)
@@ -2749,7 +2944,8 @@ def plotHydroTimeseries():
         
         ax[0][i].set_title(names[i],fontweight='normal',rotation=90,fontsize=8)
 
-    plt.savefig('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/figs/Hydrodynamics.png',dpi=400)
+    plt.subplots_adjust(top=0.86,right=0.964)
+    plt.savefig('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/figs/Submission1/Hydrodynamics.png',dpi=400)
     plt.show()
             
     
