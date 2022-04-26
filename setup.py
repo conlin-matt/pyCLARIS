@@ -8,7 +8,7 @@ setuptools.setup(
     author_email="conlinm@ufl.edu",
     description="Analysis of CLARIS data in Python- tools and projects.",
     packages=setuptools.find_packages(),
-    install_requires=['alphashape','jupyter','matplotlib','netCDF4','numpy','numpy_groupies','pandas','pptk','pyyaml','scipy'],
+    install_requires=['alphashape','jupyter','matplotlib','numpy','numpy_groupies','pandas','pptk','pyyaml','scipy'],
     classifiers=[
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
