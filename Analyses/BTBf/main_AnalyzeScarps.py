@@ -1156,13 +1156,13 @@ def examineAndPlot_VarsVsBT_AllWays():
         ii+=1
         try:
             vals = results_byStorm.loc[results_byStorm['Name'] == i]['results'][ii]['BT']
-            iUse1 = np.where(abs(vals)<=1)[0]
-            vals = vals[iUse1]
+##            iUse1 = np.where(abs(vals)<=1)[0]
+##            vals = vals[iUse1]
         except:
             ii-=1
         else:
             BT_all1.append(vals)
-            iUse.append(iUse1)
+##            iUse.append(iUse1)
     BT_all = [item for sublist in BT_all1 for item in sublist]
 
 
@@ -1373,12 +1373,12 @@ def examineAndPlot_VarsVsBT_AllWays():
     for ii in range(0,len(results_byStorm)):
         name = results_byStorm.loc[ii]['Name']
         results = results_byStorm.loc[ii]['results']
-        BT_mean = np.nanmedian(np.array(results['BT'])[np.where(abs(results['BT'])<1)[0]])
-        BT_25 = np.nanpercentile(np.array(results['BT'])[np.where(abs(results['BT'])<1)[0]],25)
-        BT_75 = np.nanpercentile(np.array(results['BT'])[np.where(abs(results['BT'])<1)[0]],75)
-        val_mean = np.nanmedian(np.array(results[varsToPlot]).astype(float)[np.where(abs(results['BT'])<1)[0]])
-        val_25 = np.nanpercentile(np.array(results[varsToPlot]).astype(float)[np.where(abs(results['BT'])<1)[0]],25)
-        val_75 = np.nanpercentile(np.array(results[varsToPlot]).astype(float)[np.where(abs(results['BT'])<1)[0]],75)
+        BT_mean = np.nanmedian(np.array(results['BT']))
+        BT_25 = np.nanpercentile(np.array(results['BT']),25)
+        BT_75 = np.nanpercentile(np.array(results['BT']),75)
+        val_mean = np.nanmedian(np.array(results[varsToPlot]).astype(float))
+        val_25 = np.nanpercentile(np.array(results[varsToPlot]).astype(float),25)
+        val_75 = np.nanpercentile(np.array(results[varsToPlot]).astype(float),75)
         
         alpha_scaled = 0.8#((n-20)/(100-20))
         
@@ -1510,7 +1510,7 @@ def examineAndPlot_VarsVsBT_AllWays():
             ii+=1
             try:
                 vals = results_byStorm.loc[results_byStorm['Name'] == i]['results'][ii][colorVal]
-                vals = vals[iUse[ii]]
+##                vals = vals[iUse[ii]]
             except:
                 ii-=1
             else:
@@ -1519,8 +1519,8 @@ def examineAndPlot_VarsVsBT_AllWays():
         
         vals_all = np.array(vals_all)
         BT_all = np.array(BT_all)
-        vals_all[np.abs(BT_all)>1] = np.nan
-        BT_all[np.abs(BT_all)>1] = np.nan
+##        vals_all[np.abs(BT_all)>1] = np.nan
+##        BT_all[np.abs(BT_all)>1] = np.nan
         
         for s in range(0,len(vals_all1)):
             ax[1,iii].plot(vals_all1[s],BT_all1[s],'.',markersize=2)
@@ -1647,9 +1647,9 @@ def examineAndPlot_VarsVsBT_AllWays():
         for ii in range(0,len(results_byStorm)):
             name = results_byStorm.loc[ii]['Name']
             results = results_byStorm.loc[ii]['results']
-            BT_mean = np.nanmedian(results['BT'][np.where(results['BT']!=-np.inf)[0]])
-            BT_25 = np.nanpercentile(results['BT'][np.where(results['BT']!=-np.inf)[0]],25)
-            BT_75 = np.nanpercentile(results['BT'][np.where(results['BT']!=-np.inf)[0]],75)
+            BT_mean = np.nanmedian(results['BT'])
+            BT_25 = np.nanpercentile(results['BT'],25)
+            BT_75 = np.nanpercentile(results['BT'],75)
             val_mean = np.nanmedian(results[colorVal])
             val_25 = np.nanpercentile(results[colorVal],25)
             val_75 = np.nanpercentile(results[colorVal],75)
@@ -1705,7 +1705,7 @@ def examineAndPlot_VarsVsBT_AllWays():
         if colorVal==varsToPlot[0]:
             fig.legend(loc='lower center',frameon=False,handletextpad=0.1,fontsize=8,ncol=3)
     plt.subplots_adjust(left=0.125,bottom=0.204,right=0.9,top=0.944,wspace=0.2,hspace=0.2)
-    plt.savefig('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/figs/Submission1/Appendix1',dpi=450)
+    plt.savefig('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/figs/Submission1/Appendix2',dpi=450)
             
         
 ##        # Scatters for each storm #        
@@ -1784,6 +1784,7 @@ def examineAndPlot_TWLVsBT():
     files = sorted([i for i in os.listdir('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/data/') if 'scarpResults' in i])
     files_use = [i for i in files if method in i and 'd2' in i]
     results_byStorm = pd.DataFrame(columns=['Name','results'])
+    c=-1
     for file in files_use:
         
         results = pd.DataFrame(columns=['BT',
@@ -1841,11 +1842,11 @@ def examineAndPlot_TWLVsBT():
         f = open('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/data/'+file,'rb')
         scarpResults=pickle.load(f)
         Bf = scarpResults.Bf
-        print(Bf[0])
         BT = scarpResults.BT
         scarpToes = scarpResults.scarpToes
         T_scarps = scarpResults.T_scarps
         forwardFlag = scarpResults.forwardFlag
+
         
         for scarp in range(0,len(T_scarps)):
             for ii in range(0,len(T_scarps[scarp][0])):
@@ -1929,23 +1930,23 @@ def examineAndPlot_TWLVsBT():
             name = results_byStorm.loc[ii]['Name']
             results = results_byStorm.loc[ii]['results']
             if len(results)>0:
-                BT = np.nanmedian(np.array(results['BT'])[np.where(abs(results['BT'])<1)[0]])
-                BT_25 = np.nanpercentile(np.array(results['BT'])[np.where(abs(results['BT'])<1)[0]],25)
-                BT_75 = np.nanpercentile(np.array(results['BT'])[np.where(abs(results['BT'])<1)[0]],75)
-                F = np.nanmedian(np.array(results['$F_{R'+str(exc)+'%}$'])[np.where(abs(results['BT'])<1)[0]])
-                F_25 = np.nanpercentile(np.array(results['$F_{R'+str(exc)+'%}$'])[np.where(abs(results['BT'])<1)[0]],25)
-                F_75 = np.nanpercentile(np.array(results['$F_{R'+str(exc)+'%}$'])[np.where(abs(results['BT'])<1)[0]],75)
-                ti = np.nanmedian(np.array(results['$ti_{R'+str(exc)+'%}$'])[np.where(abs(results['BT'])<1)[0]])
-                ti_25 = np.nanpercentile(np.array(results['$ti_{R'+str(exc)+'%}$'])[np.where(abs(results['BT'])<1)[0]],25)
-                ti_75 = np.nanpercentile(np.array(results['$ti_{R'+str(exc)+'%}$'])[np.where(abs(results['BT'])<1)[0]],75) 
+                BT = np.nanmedian(np.array(results['BT']))
+                BT_25 = np.nanpercentile(np.array(results['BT']),25)
+                BT_75 = np.nanpercentile(np.array(results['BT']),75)
+                F = np.nanmedian(np.array(results['$F_{R'+str(exc)+'%}$']))
+                F_25 = np.nanpercentile(np.array(results['$F_{R'+str(exc)+'%}$']),25)
+                F_75 = np.nanpercentile(np.array(results['$F_{R'+str(exc)+'%}$']),75)
+                ti = np.nanmedian(np.array(results['$ti_{R'+str(exc)+'%}$']))
+                ti_25 = np.nanpercentile(np.array(results['$ti_{R'+str(exc)+'%}$']),25)
+                ti_75 = np.nanpercentile(np.array(results['$ti_{R'+str(exc)+'%}$']),75) 
                 
                 BT_mean1.append([BT,(BT_25,BT_75)])
                 F_mean1.append([F,(F_25,F_75)])
                 ti_mean1.append([ti,(ti_25,ti_75)])
                 
-                BT_all1.append(np.array(results['BT'])[np.where(abs(results['BT'])<1)[0]])
-                F_all1.append(np.array(results['$F_{R'+str(exc)+'%}$'])[np.where(abs(results['BT'])<1)[0]])
-                ti_all1.append(np.array(results['$ti_{R'+str(exc)+'%}$'])[np.where(abs(results['BT'])<1)[0]])
+                BT_all1.append(np.array(results['BT']))
+                F_all1.append(np.array(results['$F_{R'+str(exc)+'%}$']))
+                ti_all1.append(np.array(results['$ti_{R'+str(exc)+'%}$']))
         
         BT_mean = BT_mean1
         F_mean.append(F_mean1)
@@ -1957,14 +1958,14 @@ def examineAndPlot_TWLVsBT():
     fig,ax = plt.subplots(3,2,figsize=(3.25,6))
     excs=[2,7,16]
     for i in range(0,len(excs)):
-        [ax[i][0].plot(ti_all[i][ii],BT_all[i][ii],'.',markersize=2) for ii in range(0,len(BT_all[0]))]
+        [ax[i][0].plot(F_all[i][ii],BT_all[i][ii],'.',markersize=2) for ii in range(0,len(BT_all[0]))]
         hh = []
         for ii in range(0,len(F_mean[i])):
-            ax[i][1].plot((ti_mean[i][ii][0],ti_mean[i][ii][0]),(BT_mean[ii][0],BT_mean[ii][1][0]),'k',linewidth=1)
-            ax[i][1].plot((ti_mean[i][ii][0],ti_mean[i][ii][0]),(BT_mean[ii][0],BT_mean[ii][1][1]),'k',linewidth=1)
-            ax[i][1].plot((ti_mean[i][ii][0],ti_mean[i][ii][1][0]),(BT_mean[ii][0],BT_mean[ii][0]),'k',linewidth=1)
-            ax[i][1].plot((ti_mean[i][ii][0],ti_mean[i][ii][1][1]),(BT_mean[ii][0],BT_mean[ii][0]),'k',linewidth=1)
-            hh.append(ax[i][1].plot(ti_mean[i][ii][0],BT_mean[ii][0],'s',alpha=0.8,markersize=14))
+            ax[i][1].plot((F_mean[i][ii][0],F_mean[i][ii][0]),(BT_mean[ii][0],BT_mean[ii][1][0]),'k',linewidth=1)
+            ax[i][1].plot((F_mean[i][ii][0],F_mean[i][ii][0]),(BT_mean[ii][0],BT_mean[ii][1][1]),'k',linewidth=1)
+            ax[i][1].plot((F_mean[i][ii][0],F_mean[i][ii][1][0]),(BT_mean[ii][0],BT_mean[ii][0]),'k',linewidth=1)
+            ax[i][1].plot((F_mean[i][ii][0],F_mean[i][ii][1][1]),(BT_mean[ii][0],BT_mean[ii][0]),'k',linewidth=1)
+            hh.append(ax[i][1].plot(F_mean[i][ii][0],BT_mean[ii][0],'s',alpha=0.8,markersize=14))
 
             def power_law(x, a, b, c):
                 return (a*np.power(x,b))+c
@@ -2011,24 +2012,24 @@ def examineAndPlot_TWLVsBT():
 
         fig.legend([ii[0] for ii in hh],['2013NE','Riley','Dorian','2019NE1','2019NE2','Teddy','2021NE'],loc='upper center',
                frameon=True,handletextpad=0.1,fontsize=8,ncol=2,markerscale=0.5)
-        ax[0,0].set_xlabel(r'$t_{I,2\%}$ (hr)')
-        ax[0,1].set_xlabel(r'$t_{I,2\%}$ (hr)')
-        ax[1,0].set_xlabel(r'$t_{I,7\%}$ (hr)')
-        ax[1,1].set_xlabel(r'$t_{I,7\%}$ (hr)')        
-        ax[2,0].set_xlabel(r'$t_{I,16\%}$ (hr)')
-        ax[2,1].set_xlabel(r'$t_{I,16\%}$ (hr)')
+        ax[0,0].set_xlabel(r'$F_{T,2\%}$ (m)')
+        ax[0,1].set_xlabel(r'$F_{T,2\%}$ (m)')
+        ax[1,0].set_xlabel(r'$F_{T,7\%}$ (m)')
+        ax[1,1].set_xlabel(r'$F_{T,7\%}$ (m)')        
+        ax[2,0].set_xlabel(r'$F_{T,16\%}$ (m)')
+        ax[2,1].set_xlabel(r'$F_{T,16\%}$ (m)')
 ##        ax[0,0].text(-.65,.5,'R2%',fontweight='bold',fontsize=10,transform=ax[0,0].transAxes)
 ##        ax[1,0].text(-.65,.5,'R7%',fontweight='bold',fontsize=10,transform=ax[1,0].transAxes)
 ##        ax[2,0].text(-.65,.5,'R16%',fontweight='bold',fontsize=10,transform=ax[2,0].transAxes)
-        ax[0,0].text(0.01,0.9,'g',fontsize=8,fontweight='bold',transform=ax[0][0].transAxes)
-        ax[0,1].text(0.01,0.9,'h',fontsize=8,fontweight='bold',transform=ax[0][1].transAxes)
-        ax[1,0].text(0.01,0.9,'i',fontsize=8,fontweight='bold',transform=ax[1][0].transAxes)
-        ax[1,1].text(0.01,0.9,'j',fontsize=8,fontweight='bold',transform=ax[1][1].transAxes)            
-        ax[2,0].text(0.01,0.9,'k',fontsize=8,fontweight='bold',transform=ax[2][0].transAxes)
-        ax[2,1].text(0.01,0.9,'l',fontsize=8,fontweight='bold',transform=ax[2][1].transAxes)
+        ax[0,0].text(0.01,0.9,'a',fontsize=8,fontweight='bold',transform=ax[0][0].transAxes)
+        ax[0,1].text(0.01,0.9,'b',fontsize=8,fontweight='bold',transform=ax[0][1].transAxes)
+        ax[1,0].text(0.01,0.9,'c',fontsize=8,fontweight='bold',transform=ax[1][0].transAxes)
+        ax[1,1].text(0.01,0.9,'d',fontsize=8,fontweight='bold',transform=ax[1][1].transAxes)            
+        ax[2,0].text(0.01,0.9,'e',fontsize=8,fontweight='bold',transform=ax[2][0].transAxes)
+        ax[2,1].text(0.01,0.9,'f',fontsize=8,fontweight='bold',transform=ax[2][1].transAxes)
 
         plt.subplots_adjust(left=0.2, bottom=0.11, right=0.95, top=0.87, wspace=0.414, hspace=0.42)
-        plt.savefig('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/figs/Submission1/BTvsFTandImpactDur_Rm_2.png',dpi=450)
+        plt.savefig('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/figs/Submission1/BTvsFTandImpactDur_Rm_1.png',dpi=450)
     
 
     # FT vs. BT colored by duration #
@@ -2061,12 +2062,13 @@ def examineAndPlot_TWLVsBT():
     for ii in range(0,len(results_byStorm)):
         name = results_byStorm.loc[ii]['Name']
         results = results_byStorm.loc[ii]['results']
-        BT = np.array(results['BT'])[np.where(abs(results['BT'])<1)[0]]
-        F = np.array(results['$F_{R2%}$'])[np.where(abs(results['BT'])<1)[0]]
+        BT = np.array(results['BT'])
+        F = np.array(results['$F_{R2%}$'])
         BT_all.append(BT)
         F_all.append(F)
     BT = np.hstack(BT_all)
     F = np.hstack(F_all)
+    print(len(BT))
     
     BT_all = np.hstack([BT,BT_BL,BT_SP,BT_OL])
     F_all = np.hstack([F,F_BL,F_SP,F_OL])
@@ -2382,63 +2384,6 @@ def plotDuneChangeSummary():
         plt.savefig('/Users/frfuser/Documents/pyCLARIS_project/Analyses/BTBf/figs/Submission1/DuneChangeSummary_3',dpi=450)
           
     
-    # Plot the bar plots #
-    fig,ax = plt.subplots(4,1,figsize=(6.5,3),sharex=True)
-    for ii in range(0,len(results_byStorm)):
-        name = results_byStorm.loc[ii]['Name']
-        results = results_byStorm.loc[ii]['results']
-        
-        L = len(results)*5
-        ax[0].add_artist(Rectangle((ii-0.4,0),0.8,L))
-        ax[0].plot(ii,L,'k.',markersize=0.01)
-        
-        V_mean = np.nanmedian(np.array(results['$\Delta V_D$ ($m^3/m$)'])[abs(results['BT']<1)])
-        V_25 = np.nanpercentile(np.array(results['$\Delta V_D$ ($m^3/m$)'])[abs(results['BT']<1)],25)
-        V_75 = np.nanpercentile(np.array(results['$\Delta V_D$ ($m^3/m$)'])[abs(results['BT']<1)],75)
-        ax[1].add_artist(Rectangle((ii-0.4,0),0.8,V_mean))
-        ax[1].plot((ii,ii),(V_mean,V_25),'k',linewidth=1)
-        ax[1].plot((ii,ii),(V_mean,V_75),'k',linewidth=1)
-        dat = np.array(results['$\Delta V_D$ ($m^3/m$)'])[abs(results['BT']<1)]
-        iFliers = np.argsort(dat)[0:11]
-##        ax[1].plot(np.tile(ii,len(iFliers)),dat[iFliers],'kx',markersize=2)
-##        print(str(V_mean)+','+str(V_75-V_25)+','+str((V_75-V_25)/V_mean))
-        
-        dx_mean = np.nanmedian(np.array(results['dx (m)'])[abs(results['BT']<1)])
-        dx_25 = np.nanpercentile(np.array(results['dx (m)'])[abs(results['BT']<1)],25)
-        dx_75 = np.nanpercentile(np.array(results['dx (m)'])[abs(results['BT']<1)],75)  
-        ax[2].add_artist(Rectangle((ii-0.4,0),0.8,dx_mean))
-        ax[2].plot((ii,ii),(dx_mean,dx_25),'k',linewidth=1)
-        ax[2].plot((ii,ii),(dx_mean,dx_75),'k',linewidth=1)
-
-        BT_mean = np.nanmedian(np.array(results['BT'])[abs(results['BT']<1)])
-        BT_25 = np.nanpercentile(np.array(results['BT'])[abs(results['BT']<1)],25)
-        BT_75 = np.nanpercentile(np.array(results['BT'])[abs(results['BT']<1)],75)         
-        ax[3].add_artist(Rectangle((ii-0.4,0),0.8,BT_mean))
-        ax[3].plot((ii,ii),(BT_mean,BT_25),'k',linewidth=1)
-        ax[3].plot((ii,ii),(BT_mean,BT_75),'k',linewidth=1)
-        print(str(BT_mean)+','+str(BT_75-BT_25)+','+str((BT_75-BT_25)/BT_mean))
-
-    ax[0].set_ylim(0,2000)
-##    ax[1].set_ylim(-12,0)
-    ax[2].set_ylim(-6,0)
-    ax[3].set_ylim(-0.27,0.27)
-    ax[1].invert_yaxis()
-    ax[2].invert_yaxis()
-    ax[0].set_ylabel('L (m)')
-    ax[1].set_ylabel('$\Delta V_D$ ($m^3/m$)')
-    ax[2].set_ylabel('dx (m)')
-    ax[3].set_ylabel('$B_T$')
-    for i in [0,1,2,3]:
-        ax[i].plot((-1,8),(0,0),'k',linewidth=1)
-        ax[i].set_xlim(-0.5,6.5)
-    fig.align_ylabels()
-    ax[3].set_xticklabels(['','2013NE','Riley','Dorian','2019NE1','2019NE2','Teddy','2021NE'])
-    ax[0].text(0.005,0.8,'c',transform=ax[0].transAxes,fontweight='bold')
-    ax[1].text(0.005,0.8,'d',transform=ax[1].transAxes,fontweight='bold')
-    ax[2].text(0.005,0.8,'e',transform=ax[2].transAxes,fontweight='bold')
-    ax[3].text(0.005,0.8,'f',transform=ax[3].transAxes,fontweight='bold')
-        
-    plt.show()  
  
 
 def plotStormParams():   
