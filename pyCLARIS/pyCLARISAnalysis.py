@@ -838,9 +838,8 @@ class scarpManager():
         
         '''
 
-        print('This is a test')    
         toes = [np.empty([0,3]),np.empty([0,3])]
-        for day in range(0,2):
+        for day in range(0,1):
             for t in range(0,len(T[0])):
                 
                 xx = T[day][t]['X']
