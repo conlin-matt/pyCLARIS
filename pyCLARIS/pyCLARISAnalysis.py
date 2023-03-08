@@ -455,13 +455,13 @@ class pcManager():
         self.xyz = np.transpose(np.array([data[0]['X'],data[0]['Y'],data[0]['Z']]))
 
         if rgb_or_I == 'rgb':
-            if np.all(data[0][1:1000]['Blue']==65280) or np.all(data[0][1:1000]['Blue']==0): # No RGB info #
-                self.rgb = data[0]['Z']
-                self.v = pptk.viewer(self.xyz,self.rgb)
-                self.v.set(color_map_scale=(0,8))
-            else:
-                self.rgb = np.transpose(np.array([data[0]['Red']/256/255,data[0]['Green']/256/255,data[0]['Blue']/256/255]))
-                self.v = pptk.viewer(self.xyz,self.rgb)
+##            if np.all(data[0][1:1000]['Blue']==65280) or np.all(data[0][1:1000]['Blue']==0): # No RGB info #
+            self.rgb = data[0]['Z']
+            self.v = pptk.viewer(self.xyz,self.rgb)
+            self.v.set(color_map_scale=(75,76))#0,8))
+##            else:
+##                self.rgb = np.transpose(np.array([data[0]['Red']/256/255,data[0]['Green']/256/255,data[0]['Blue']/256/255]))
+##                self.v = pptk.viewer(self.xyz,self.rgb)
         elif rgb_or_I == 'I':
             self.rgb = data[0]['Intensity']
             self.v = pptk.viewer(self.xyz,self.rgb)
@@ -525,7 +525,10 @@ def extractChangeAreas(xx,yy,dsm_pre,dsm_post,thresh=0.1):
                     try:
                         verts1 = alpha_shape.exterior.coords.xy
                     except:
-                        alpha_shape = alphashape.alphashape(locs)
+                        try:
+                            alpha_shape = alphashape.alphashape(locs)
+                        except ZeroDivisionError:
+                            alpha_shape = alphashape.alphashape(locs,0)
                         verts1 = alpha_shape.exterior.coords.xy
 
                     verts = np.transpose(np.vstack([verts1[0],verts1[1]]))
@@ -848,7 +851,8 @@ class scarpManager():
                 if len(xx)>1:
                 
                     try:
-                        pb = Profile(xx[np.logical_and(zz>=1,zz<=5)],zz[np.logical_and(zz>=1,zz<=5)])
+##                        pb = Profile(xx[np.logical_and(zz>=1,zz<=5)],zz[np.logical_and(zz>=1,zz<=5)])
+                        a=2
                     except:
                         toe_x = np.nan
                         toe_y = np.nan
